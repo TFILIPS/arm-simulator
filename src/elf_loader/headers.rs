@@ -98,20 +98,48 @@ impl ELFHeader {
         }
     }
 
-    pub fn magic(&self) -> &[u8; 16] { &self.elf_id }
-    pub fn elf_type(&self) -> &u16 { &self.elf_type }
-    pub fn machine(&self) -> &u16 { &self.machine }
-    pub fn elf_version(&self) -> &u32 { &self.elf_version}
-    pub fn entry_point(&self) -> &u32 { &self.entry_point }
-    pub fn program_table_offset(&self) -> &u32 { &self.program_table_offset }
-    pub fn section_table_offset(&self) -> &u32 { &self.section_table_offset }
-    pub fn flags(&self) -> &u32 { &self.flags }
-    pub fn elf_header_size(&self) -> &u16 { &self.elf_header_size }
-    pub fn program_header_size(&self) -> &u16 { &self.program_header_size }
-    pub fn num_program_headers(&self) -> &u16 { &self.num_program_headers }
-    pub fn section_header_size(&self) -> &u16 { &self.section_header_size }
-    pub fn num_section_headers(&self) -> &u16 { &self.num_section_headers }
-    pub fn string_table_idx(&self) -> &u16 { &self.string_table_idx }
+    pub fn magic(&self) -> &[u8; 16] {
+        &self.elf_id
+    }
+    pub fn elf_type(&self) -> &u16 {
+        &self.elf_type
+    }
+    pub fn machine(&self) -> &u16 {
+        &self.machine
+    }
+    pub fn elf_version(&self) -> &u32 {
+        &self.elf_version
+    }
+    pub fn entry_point(&self) -> &u32 {
+        &self.entry_point
+    }
+    pub fn program_table_offset(&self) -> &u32 {
+        &self.program_table_offset
+    }
+    pub fn section_table_offset(&self) -> &u32 {
+        &self.section_table_offset
+    }
+    pub fn flags(&self) -> &u32 {
+        &self.flags
+    }
+    pub fn elf_header_size(&self) -> &u16 {
+        &self.elf_header_size
+    }
+    pub fn program_header_size(&self) -> &u16 {
+        &self.program_header_size
+    }
+    pub fn num_program_headers(&self) -> &u16 {
+        &self.num_program_headers
+    }
+    pub fn section_header_size(&self) -> &u16 {
+        &self.section_header_size
+    }
+    pub fn num_section_headers(&self) -> &u16 {
+        &self.num_section_headers
+    }
+    pub fn string_table_idx(&self) -> &u16 {
+        &self.string_table_idx
+    }
 }
 
 #[repr(C)]
@@ -128,6 +156,7 @@ pub struct ProgramHeader {
     align: u32,
 }
 
+#[allow(dead_code)]
 impl ProgramHeader {
     pub const SIZE: usize = mem::size_of::<ProgramHeader>();
 
@@ -146,5 +175,30 @@ impl ProgramHeader {
             flags: slice_to_u32(&array[24..28], encoding),
             align: slice_to_u32(&array[28..32], encoding),
         }
+    }
+
+    pub fn program_type(&self) -> &u32 {
+        &self.program_type
+    }
+    pub fn offset(&self) -> &u32 {
+        &self.offset
+    }
+    pub fn virtual_address(&self) -> &u32 {
+        &self.virtual_address
+    }
+    pub fn physical_address(&self) -> &u32 {
+        &self.physical_address
+    }
+    pub fn file_size(&self) -> &u32 {
+        &self.file_size
+    }
+    pub fn memory_size(&self) -> &u32 {
+        &self.memory_size
+    }
+    pub fn flags(&self) -> &u32 {
+        &self.flags
+    }
+    pub fn align(&self) -> &u32 {
+        &self.align
     }
 }

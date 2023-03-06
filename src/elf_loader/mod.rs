@@ -6,7 +6,9 @@ use utils::Endian;
 mod headers;
 mod utils;
 
-pub fn load_elf(file_path: &str) {
+const MEMORY_SIZE: usize = 2usize.pow(26);
+
+pub fn load_elf(file_path: &str) -> (Vec<u8>, u32, Endian) {
     let elf_file: File = match File::open(file_path) {
         Ok(file) => file,
         Err(_) => {
@@ -18,11 +20,14 @@ pub fn load_elf(file_path: &str) {
     let elf_header: ELFHeader = read_elf_header(&elf_file);
     elf_header.check_values();
 
+    let encoding: Endian = elf_header.encoding();
+
     let program_headers: Vec<ProgramHeader> =
-        read_program_headers(&elf_file, &elf_header);
+        read_program_headers(&elf_file, &elf_header, &encoding);
 
+    let memory: Vec<u8> = create_memory(&elf_file, &program_headers);
 
-    println!("{:#x?}", program_headers);
+    return (memory, *elf_header.entry_point(), encoding);
 }
 
 fn read_elf_header(elf_file: &File) -> ELFHeader{
@@ -38,9 +43,9 @@ fn read_elf_header(elf_file: &File) -> ELFHeader{
 fn read_program_headers(
     elf_file: &File,
     elf_header: &ELFHeader,
+    encoding: &Endian
 ) -> Vec<ProgramHeader> {
     
-    let encoding: Endian = elf_header.encoding();
     let num_prog_headers: usize = *elf_header.num_program_headers() as usize;
 
     let mut program_headers: Vec<ProgramHeader> =
@@ -58,5 +63,28 @@ fn read_program_headers(
 
         offset += ProgramHeader::SIZE as u64;
     }
+
     return program_headers;
+}
+
+fn create_memory(
+    elf_file: &File, 
+    program_headers: &Vec<ProgramHeader>
+) -> Vec<u8> {
+
+    let mut memory: Vec<u8> = vec![0; MEMORY_SIZE];
+
+    for header in program_headers {
+        let offset: u64 = *header.offset() as u64;
+        let start: usize = *header.virtual_address() as usize;
+        let end: usize = start + *header.file_size() as usize; 
+
+        if let Err(_) = 
+            elf_file.read_exact_at(&mut memory[start..end], offset) {
+            
+            eprintln!("Error while initializing memory from ELF file!");
+            exit(-1);
+        }
+    }
+    return memory;
 }
