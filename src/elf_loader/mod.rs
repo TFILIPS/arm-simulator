@@ -20,6 +20,7 @@ pub fn load_elf(file_path: &str) {
     }
 
     let file_header: ELFHeader = ELFHeader::from_byte_array(header_bytes);
-    
     println!("{:#x?}", file_header);
+
+    file_header.check_values();
 }

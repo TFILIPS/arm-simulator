@@ -3,7 +3,13 @@ use super::utils::{Endian, slice_to_u16, slice_to_u32};
 
 // Defined values every ELF file header has to contain
 const ELF_ID: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
-const HEADER_VERSION_KEY: u8 = 1;
+const HEADER_VERSION_KEY: u8 = 0x1;
+const ELF_VERSION_KEY: u32 = 0x1;
+
+// Modifiable values: For this program we want an 32-bit ARM executable
+const CLASS_KEY: u8 = 0x1; // 32-Bit
+const MACHINE_KEY: u16 = 0x28; // ARM
+const ELF_TYPE_KEY: u16 = 0x2; // executeable
 
 #[repr(C)]
 #[derive(Debug)]
@@ -61,6 +67,25 @@ impl ELFHeader {
             section_header_size: slice_to_u16(&array[46..48], &encoding),
             num_section_headers: slice_to_u16(&array[48..50], &encoding),
             string_table_idx: slice_to_u16(&array[50..52], &encoding)
+        }
+    }
+
+    pub fn check_values(&self) {
+        if self.elf_version != ELF_VERSION_KEY {
+            eprintln!("The ELF file has an invalid version!");
+            exit(-1);
+        }
+        if self.elf_type != ELF_TYPE_KEY {
+            eprintln!("The ELF file is not an executable file!");
+            exit(-1);
+        }
+        if self.machine != MACHINE_KEY {
+            eprintln!("The ELF file is not ARM compatible!");
+            exit(-1);
+        }
+        if self.elf_id[4] != CLASS_KEY {
+            eprintln!("The ELF file is not 32-bit compatible!");
+            exit(-1);
         }
     }
 }
