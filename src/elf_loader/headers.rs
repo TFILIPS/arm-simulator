@@ -1,5 +1,5 @@
-use std::{process::exit, mem};
-use super::utils::{Endian, slice_to_u16, slice_to_u32};
+use super::utils::{slice_to_u16, slice_to_u32, Endian};
+use std::{mem, process::exit};
 
 // Defined values every ELF file header has to contain
 const ELF_ID: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
@@ -15,7 +15,7 @@ const ELF_TYPE_KEY: u16 = 0x2; // executeable
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct ELFHeader {
-    elf_id: [u8; 16], 
+    elf_id: [u8; 16],
     elf_type: u16,
     machine: u16,
     elf_version: u32,
@@ -28,9 +28,10 @@ pub struct ELFHeader {
     num_program_headers: u16,
     section_header_size: u16,
     num_section_headers: u16,
-    string_table_idx: u16
+    string_table_idx: u16,
 }
 
+#[allow(dead_code)]
 impl ELFHeader {
     pub const SIZE: usize = mem::size_of::<ELFHeader>();
 
@@ -66,7 +67,7 @@ impl ELFHeader {
             num_program_headers: slice_to_u16(&array[44..46], &encoding),
             section_header_size: slice_to_u16(&array[46..48], &encoding),
             num_section_headers: slice_to_u16(&array[48..50], &encoding),
-            string_table_idx: slice_to_u16(&array[50..52], &encoding)
+            string_table_idx: slice_to_u16(&array[50..52], &encoding),
         }
     }
 
@@ -86,6 +87,64 @@ impl ELFHeader {
         if self.elf_id[4] != CLASS_KEY {
             eprintln!("The ELF file is not 32-bit compatible!");
             exit(-1);
+        }
+    }
+
+    pub fn encoding(&self) -> Endian {
+        match self.elf_id[4] {
+            1 => Endian::Little,
+            2 => Endian::Big,
+            _ => panic!("Header contains invalid data encoding!"),
+        }
+    }
+
+    pub fn magic(&self) -> &[u8; 16] { &self.elf_id }
+    pub fn elf_type(&self) -> &u16 { &self.elf_type }
+    pub fn machine(&self) -> &u16 { &self.machine }
+    pub fn elf_version(&self) -> &u32 { &self.elf_version}
+    pub fn entry_point(&self) -> &u32 { &self.entry_point }
+    pub fn program_table_offset(&self) -> &u32 { &self.program_table_offset }
+    pub fn section_table_offset(&self) -> &u32 { &self.section_table_offset }
+    pub fn flags(&self) -> &u32 { &self.flags }
+    pub fn elf_header_size(&self) -> &u16 { &self.elf_header_size }
+    pub fn program_header_size(&self) -> &u16 { &self.program_header_size }
+    pub fn num_program_headers(&self) -> &u16 { &self.num_program_headers }
+    pub fn section_header_size(&self) -> &u16 { &self.section_header_size }
+    pub fn num_section_headers(&self) -> &u16 { &self.num_section_headers }
+    pub fn string_table_idx(&self) -> &u16 { &self.string_table_idx }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+#[allow(dead_code)]
+pub struct ProgramHeader {
+    program_type: u32,
+    offset: u32,
+    virtual_address: u32,
+    physical_address: u32,
+    file_size: u32,
+    memory_size: u32,
+    flags: u32,
+    align: u32,
+}
+
+impl ProgramHeader {
+    pub const SIZE: usize = mem::size_of::<ProgramHeader>();
+
+    pub fn from_byte_array(
+        array: [u8; ProgramHeader::SIZE],
+        encoding: &Endian,
+    ) -> Self {
+        
+        Self {
+            program_type: slice_to_u32(&array[0..4], encoding),
+            offset: slice_to_u32(&array[4..8], encoding),
+            virtual_address: slice_to_u32(&array[8..12], encoding),
+            physical_address: slice_to_u32(&array[12..16], encoding),
+            file_size: slice_to_u32(&array[16..20], encoding),
+            memory_size: slice_to_u32(&array[20..24], encoding),
+            flags: slice_to_u32(&array[24..28], encoding),
+            align: slice_to_u32(&array[28..32], encoding),
         }
     }
 }
