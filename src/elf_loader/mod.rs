@@ -1,90 +1,85 @@
-use std::{fs::File, os::unix::prelude::FileExt, process::exit};
+use std::fs;
 
 use headers::{ELFHeader, ProgramHeader};
 use utils::Endian;
 
 mod headers;
-mod utils;
+pub mod utils;
 
-const MEMORY_SIZE: usize = 2usize.pow(26);
-
-pub fn load_elf(file_path: &str) -> (Vec<u8>, u32, Endian) {
-    let elf_file: File = match File::open(file_path) {
-        Ok(file) => file,
-        Err(_) => {
-            eprintln!("Unable to open ELF file!");
-            exit(-1);
-        }
-    };
-
-    let elf_header: ELFHeader = read_elf_header(&elf_file);
-    elf_header.check_values();
-
-    let encoding: Endian = elf_header.encoding();
-
-    let program_headers: Vec<ProgramHeader> =
-        read_program_headers(&elf_file, &elf_header, &encoding);
-
-    let memory: Vec<u8> = create_memory(&elf_file, &program_headers);
-
-    return (memory, *elf_header.entry_point(), encoding);
+pub struct ELFFile {
+    elf_header: ELFHeader,
+    raw_data: Vec<u8>,
+    encoding: Endian
 }
 
-fn read_elf_header(elf_file: &File) -> ELFHeader{
-    let mut header_bytes: [u8; ELFHeader::SIZE] = [0u8; ELFHeader::SIZE];
-    if let Err(_) = elf_file.read_exact_at(&mut header_bytes, 0) {
-        eprintln!("ELF file is to short to be valid!");
-        exit(-1);
-    }
-
-    return ELFHeader::from_byte_array(header_bytes);
-}
-
-fn read_program_headers(
-    elf_file: &File,
-    elf_header: &ELFHeader,
-    encoding: &Endian
-) -> Vec<ProgramHeader> {
-    
-    let num_prog_headers: usize = *elf_header.num_program_headers() as usize;
-
-    let mut program_headers: Vec<ProgramHeader> =
-        Vec::with_capacity(num_prog_headers);
-
-    let mut offset: u64 = *elf_header.program_table_offset() as u64;
-    for _ in 0..num_prog_headers {
-        let mut buffer: [u8; ProgramHeader::SIZE] = [0u8; ProgramHeader::SIZE];
-
-        if let Err(_) = elf_file.read_exact_at(&mut buffer, offset) {
-            eprintln!("Error while reading program headers!");
-            exit(-1);
+impl ELFFile {
+    pub fn load(file_path: &str) -> Result<Self, String> {
+        let raw_data: Vec<u8> = match fs::read(file_path) {
+            Ok(file_content) => file_content,
+            Err(_) => return Err(String::from("Failed to read the ELF file!"))
         };
-        program_headers.push(ProgramHeader::from_byte_array(buffer, &encoding));
 
-        offset += ProgramHeader::SIZE as u64;
-    }
-
-    return program_headers;
-}
-
-fn create_memory(
-    elf_file: &File, 
-    program_headers: &Vec<ProgramHeader>
-) -> Vec<u8> {
-
-    let mut memory: Vec<u8> = vec![0; MEMORY_SIZE];
-
-    for header in program_headers {
-        let offset: u64 = *header.offset() as u64;
-        let start: usize = *header.virtual_address() as usize;
-        let end: usize = start + *header.file_size() as usize; 
-
-        if let Err(_) = 
-            elf_file.read_exact_at(&mut memory[start..end], offset) {
-            
-            eprintln!("Error while initializing memory from ELF file!");
-            exit(-1);
+        if raw_data.len() < ELFHeader::SIZE {
+            return Err(String::from("ELF file is to short to be valid!"));
         }
+        
+        let mut header_bytes: [u8; ELFHeader::SIZE] = [0u8; ELFHeader::SIZE];
+        header_bytes.copy_from_slice(&raw_data[0..ELFHeader::SIZE]);
+        let (elf_header, encoding) = ELFHeader::new(header_bytes)?;
+
+        Ok(Self { elf_header, raw_data, encoding })
     }
-    return memory;
+
+    pub fn check_header_values(&self) -> Result<(), String> {
+        self.elf_header.check_values()
+    }
+
+    pub fn load_into_memory(&self, memory: &mut Vec<u8>) -> Result<(), String> {
+        let headers: Vec<ProgramHeader> = self.read_program_headers()?;
+        for header in headers {
+            // toDo: check for errors
+            let file_start: usize = header.offset as usize;
+            let file_end: usize = file_start + header.file_size as usize;
+            let mem_start: usize = header.virtual_address as usize;
+            let mem_end: usize = mem_start + header.memory_size as usize;
+
+            memory[mem_start..mem_end].copy_from_slice(
+                &self.raw_data[file_start..file_end]
+            );
+        }
+        Ok(())
+    }
+
+    pub fn get_entry_point(&self) -> u32 {
+        self.elf_header.entry_point
+    }
+
+    pub fn get_encoding(&self) -> &Endian {
+        &self.encoding
+    }
+
+    fn read_program_headers(&self) -> Result<Vec<ProgramHeader>, String> {
+        const HEADER_SIZE: usize = ProgramHeader::SIZE;
+
+        let num_headers: usize = self.elf_header.num_program_headers as usize;
+        let mut headers: Vec<ProgramHeader> = Vec::with_capacity(num_headers);
+
+        let mut start: usize = self.elf_header.program_table_offset as usize;
+        let mut stop: usize = start + HEADER_SIZE;
+        for _ in 0..num_headers {
+            if self.raw_data.len() < stop {
+                return {
+                    Err(String::from("Error while reading program headers!"))
+                };
+            }
+
+            let mut header_bytes: [u8; HEADER_SIZE] = [0u8; HEADER_SIZE];
+            header_bytes.copy_from_slice(&self.raw_data[start..stop]);
+            headers.push(ProgramHeader::new(header_bytes, &self.encoding));
+
+            start += HEADER_SIZE;
+            stop += HEADER_SIZE;
+        }
+        Ok(headers)
+    }
 }
