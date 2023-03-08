@@ -3,6 +3,7 @@ use std::process::exit;
 use elf_loader::ELFFile;
 
 mod elf_loader;
+mod simulated_cpu;
 
 fn main() {
     let mut memory: Vec<u8> = vec![0u8; 2usize.pow(26)];
