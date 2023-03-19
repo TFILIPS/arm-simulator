@@ -5,16 +5,16 @@ use simulated_cpu::{SimulatedCPU, names::RegNames};
 
 mod elf_loader;
 mod simulated_cpu;
+mod utils;
 
 fn main() {
     let mut cpu: SimulatedCPU = SimulatedCPU::new();
     
     let elf_file: ELFFile = 
-        ELFFile::load("data/hello").unwrap_or_else(print_error_exit);
+        ELFFile::load("data/simple_add").unwrap_or_else(print_error_exit);
     elf_file.check_header_values().unwrap_or_else(print_error_exit);
 
     elf_file.load_memory(cpu.get_memory()).unwrap_or_else(print_error_exit);
-    //println!("{:}", elf_file.get_entry_point());
     cpu.set_register(RegNames::PC, elf_file.get_entry_point() as i32);
     cpu.set_register(RegNames::SP, 0x8000);
     cpu.set_encoding(elf_file.get_encoding());

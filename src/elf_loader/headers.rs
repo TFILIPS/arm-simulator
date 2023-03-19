@@ -1,5 +1,5 @@
 use std::mem::size_of;
-use super::utils::{slice_to_u16, slice_to_u32, Endian};
+use crate::utils::{slice_to_u16, slice_to_u32, Endian};
 use super::{ELF_ID, HEADER_VERSION_KEY};
 
 pub enum ValueError { Version, Type, Machine, Class }

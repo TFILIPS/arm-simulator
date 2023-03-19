@@ -1,6 +1,6 @@
 use names::RegNames;
 
-use crate::elf_loader::utils::{*, self};
+use crate::utils::*;
 
 pub mod names;
 
@@ -24,10 +24,12 @@ impl SimulatedCPU {
     }
 
     pub fn step(&mut self) {
+        // Read next instruction
+
         let address = self.registers[RegNames::PC] as u32 as usize;
         //println!("{address}");
         let instruction: &[u8] = &self.memory[address..address+4];
-        let instruction = utils::slice_to_u32(&instruction, &self.encoding);
+        let instruction = slice_to_u32(&instruction, &self.encoding);
         println!("{:b}", instruction);
 
         self.registers[RegNames::PC] = 
@@ -40,6 +42,10 @@ impl SimulatedCPU {
 
     pub fn set_register(&mut self, register: RegNames, value: i32) {
         self.registers[register] = value;
+    }
+
+    pub fn get_register(&self, register: RegNames) -> i32 {
+        self.registers[register]
     }
 
     pub fn set_encoding(&mut self, encoding: Endian) {

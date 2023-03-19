@@ -1,10 +1,9 @@
 use std::fs;
 
 use headers::{ELFHeader, ProgramHeader, ValueError};
-use utils::Endian;
+use crate::utils::Endian;
 
 mod headers;
-pub mod utils;
 
 // Defined values every ELF file header has to contain
 pub const ELF_ID: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
