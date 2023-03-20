@@ -1,14 +1,14 @@
 use names::RegNames;
-
 use crate::utils::*;
 
 pub mod names;
+mod instruction_decoder;
 
 pub const MEMORY_SIZE: usize = 2usize.pow(26);
 
 pub struct SimulatedCPU {
     registers: [i32; 16],
-    _flags: [bool; 4],
+    flags: [bool; 4],
     memory: Vec<u8>,
     encoding: Endian
 }
@@ -17,20 +17,19 @@ impl SimulatedCPU {
     pub fn new() -> Self {  
         Self {
             registers: [0i32; 16],
-            _flags: [false; 4],
+            flags: [false; 4],
             memory: vec![0u8; MEMORY_SIZE],
             encoding: Endian::Little
         }
     }
 
     pub fn step(&mut self) {
-        // Read next instruction
-
-        let address = self.registers[RegNames::PC] as u32 as usize;
-        //println!("{address}");
+        let address: usize = self.registers[RegNames::PC] as u32 as usize;
+        // error when end of memory
         let instruction: &[u8] = &self.memory[address..address+4];
-        let instruction = slice_to_u32(&instruction, &self.encoding);
-        println!("{:b}", instruction);
+        let bits = slice_to_u32(&instruction, &self.encoding);
+
+        self.execute_instruction(bits);
 
         self.registers[RegNames::PC] = 
             self.registers[RegNames::PC].wrapping_add(4);

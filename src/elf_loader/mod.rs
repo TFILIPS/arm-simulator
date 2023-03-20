@@ -80,7 +80,7 @@ impl ELFFile {
             Err(ValueError::Class) => {
                 Err(String::from("The ELF file is not 32-bit compatible!"))
             },
-            _ => Ok(())
+            Ok(_) => Ok(())
         }
     }
 
