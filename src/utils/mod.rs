@@ -1,5 +1,4 @@
-use std::ops::Bound;
-use std::ops::RangeBounds;
+use std::ops::{Bound, RangeBounds};
 
 #[derive(Debug, Clone, Copy)]
 pub enum Endian { Little, Big }

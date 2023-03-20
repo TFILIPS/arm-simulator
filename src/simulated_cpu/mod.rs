@@ -3,6 +3,7 @@ use crate::utils::*;
 
 pub mod names;
 mod instruction_decoder;
+mod instructions;
 
 pub const MEMORY_SIZE: usize = 2usize.pow(26);
 
@@ -27,7 +28,7 @@ impl SimulatedCPU {
         let address: usize = self.registers[RegNames::PC] as u32 as usize;
         // error when end of memory
         let instruction: &[u8] = &self.memory[address..address+4];
-        let bits = slice_to_u32(&instruction, &self.encoding);
+        let bits: u32 = slice_to_u32(&instruction, &self.encoding);
 
         self.execute_instruction(bits);
 
