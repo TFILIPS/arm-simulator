@@ -1,4 +1,4 @@
-use std::ops::{Index, IndexMut};
+use std::{ops::{Index, IndexMut}, mem::transmute};
 
 pub enum FlagNames { 
     N, Z, C, V 
@@ -15,7 +15,7 @@ impl<T> IndexMut<FlagNames> for [T] {
         return &mut self[index as usize];
     }
 }
-
+#[repr(u32)]
 pub enum RegNames { 
     R0, R1, R2, R3, R4, R5, R6, 
     R7, R8, R9, R10, R11, R12,
@@ -31,5 +31,15 @@ impl<T> Index<RegNames> for [T] {
 impl<T> IndexMut<RegNames> for [T] {
     fn index_mut(&mut self, index: RegNames) -> &mut Self::Output {
         return &mut self[index as usize];
+    }
+}
+// allow convertion from u32 to RegNames
+impl From<u32> for RegNames {
+    fn from(value: u32) -> Self {
+        const NUM_REGISTERS: u32 = 16;
+        if value >= NUM_REGISTERS {
+            panic!("Convertion to RegNames failed! value >= {NUM_REGISTERS}");
+        }
+        unsafe { transmute(value) }
     }
 }

@@ -4,6 +4,7 @@ use crate::utils::*;
 pub mod names;
 mod instruction_decoder;
 mod instructions;
+mod barrel_shifter;
 
 pub const MEMORY_SIZE: usize = 2usize.pow(26);
 

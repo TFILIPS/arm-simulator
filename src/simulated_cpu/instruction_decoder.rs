@@ -1,6 +1,6 @@
 use std::{mem::transmute};
 use crate::utils::BitAccess;
-use super::{SimulatedCPU, names::FlagNames};
+use super::{SimulatedCPU, names::{FlagNames, RegNames}, barrel_shifter::{ShifterOperand, ShiftType}};
 
 #[repr(u32)]
 #[allow(dead_code)]
@@ -40,6 +40,9 @@ impl Condition {
     }
 }
 
+
+
+// https://developer.arm.com/documentation/ddi0406/c/Application-Level-Architecture/ARM-Instruction-Set-Encoding/ARM-instruction-set-encoding?lang=en
 impl SimulatedCPU {
     pub(super) fn execute_instruction(&self, instruction: u32) {
         let cond: Condition = Condition::from_instruction(instruction);
@@ -47,27 +50,96 @@ impl SimulatedCPU {
             return;
         }
 
-        if instruction.cut_bits(26..=27) == 0b00 {
-            self.execute_data_processig_instruction(instruction);
-
-            //if instruction.cut_bits(24..=25) == 0b00 &&
-            //   instruction.cut_bits(4..=7) == 0b1001 && 
-            //   instruction.cut_bits() != 0b1111 {
-            //    //multiplication functions
-            //}
+        if instruction.cut_bits(28..=31) != 0b1111 {
+            match instruction.cut_bits(26..=27) {
+                0b00 => self.handle_data_and_miscellaneos(instruction),
+                0b01 | 0b10 => todo!("Load/store + media"),
+                0b11 => todo!("Coprocessor and supervisor calls"),
+                _ => ()
+            }
+        }
+        else {
+            todo!("Unconditional instructions")
         }
     }
 
-    const DATA_PROCESSIG_INSTRUCTIONS: [fn(&SimulatedCPU); 16] = [
-        SimulatedCPU::and, SimulatedCPU::eor, SimulatedCPU::sub, SimulatedCPU::rsb, 
-        SimulatedCPU::add, SimulatedCPU::adc, SimulatedCPU::sbc, SimulatedCPU::rsc, 
-        SimulatedCPU::tst, SimulatedCPU::teq, SimulatedCPU::cmp, SimulatedCPU::cmn,
-        SimulatedCPU::orr, SimulatedCPU::mov, SimulatedCPU::bic, SimulatedCPU::mvn
-    ];
+    fn handle_data_and_miscellaneos(&self, instruction: u32) {
+        let op: bool = instruction.get_bit(25);
+        let op1: u32 = instruction.cut_bits(20..=24);
+        let op2: u32 = instruction.cut_bits(4..=7);
 
-    fn execute_data_processig_instruction(&self, instruction: u32) {
         let opcode: usize = instruction.cut_bits(21..=24) as usize;
-        SimulatedCPU::DATA_PROCESSIG_INSTRUCTIONS[opcode](self);
+        let rn: RegNames = instruction.cut_bits(16..=19).into();
+        let rd: RegNames = instruction.cut_bits(12..=15).into();
+        let s: bool = instruction.get_bit(20);
+
+        if op {
+            if (op1 & 0b11001) ^ 0b10001 != 0 {
+                if (op2 & 0b0001) ^ 0b0000 == 0 {
+                    // Data-processing immediate shift
+                    SimulatedCPU::DATA_PROCESSIG_INSTRUCTIONS[opcode](
+                        self, s, rn, rd, ShifterOperand::ImmediateShift { 
+                            shift_amount: instruction.cut_bits(7..=11)
+                                            .try_into().unwrap(), 
+                            shift: ShiftType::LSL, 
+                            rm: instruction.cut_bits(0..=3).into()
+                        }
+                    );
+                }
+                else if (op2 & 0b1001) ^ 0b0001 == 0 {
+                    // Data-processing register shift
+                    SimulatedCPU::DATA_PROCESSIG_INSTRUCTIONS[opcode](
+                        self, s, rn, rd, ShifterOperand::RegisterShift { 
+                            rs: instruction.cut_bits(8..=11).into(), 
+                            shift: ShiftType::LSL, 
+                            rm: instruction.cut_bits(0..=3).into()
+                        }
+                    );
+                }
+            }
+        }
+        else {
+            if (op1 & 0b11001) ^ 0b10001 != 0 {
+                // Data-processing immediate
+                SimulatedCPU::DATA_PROCESSIG_INSTRUCTIONS[opcode](
+                    self, s, rn, rd, ShifterOperand::Immediate { 
+                        rotate: instruction.cut_bits(8..=11)
+                                    .try_into().unwrap(), 
+                        immediate: instruction.cut_bits(0..=7)
+                                    .try_into().unwrap() 
+                    }
+                );
+            }
+        }
     }
 
+    const DATA_PROCESSIG_INSTRUCTIONS: [
+        fn(&SimulatedCPU, bool, RegNames, RegNames, ShifterOperand); 16
+        ] = [
+        SimulatedCPU::and, SimulatedCPU::eor, SimulatedCPU::sub,
+        SimulatedCPU::rsb, SimulatedCPU::add, SimulatedCPU::adc,
+        SimulatedCPU::sbc, SimulatedCPU::rsc, SimulatedCPU::tst,
+        SimulatedCPU::teq, SimulatedCPU::cmp, SimulatedCPU::cmn,
+        SimulatedCPU::orr, SimulatedCPU::mov, SimulatedCPU::bic,
+        SimulatedCPU::mvn
+    ];
+
 }
+
+//if instruction.cut_bits(26..=27) == 0b00 {
+//
+//    if instruction.cut_bits(23..=24) == 0b10 
+//        && instruction.get_bit(20) 
+//        && instruction.cut_bits(28..=31) != 0b1111 
+//        && !instruction.get_bit(25) 
+//        && instruction.get_bit(7)
+//        && instruction.get_bit(4) {
+//            panic!("Control and DSP instruction extension space")
+//    }
+//    if instruction.cut_bits(24..=27) == 0b0000
+//        && instruction.cut_bits(4..=7) == 0b1001
+//        && instruction.cut_bits(28..=31) != 0b1111 {
+//            panic!("Multiply instruction extension space")
+//    }
+//
+//    self.execute_data_processig_instruction(instruction);
