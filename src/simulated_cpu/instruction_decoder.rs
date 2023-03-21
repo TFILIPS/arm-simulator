@@ -73,7 +73,7 @@ impl SimulatedCPU {
         let rd: RegNames = instruction.cut_bits(12..=15).into();
         let s: bool = instruction.get_bit(20);
 
-        if op {
+        if !op {
             if (op1 & 0b11001) ^ 0b10001 != 0 {
                 if (op2 & 0b0001) ^ 0b0000 == 0 {
                     // Data-processing immediate shift
@@ -115,7 +115,7 @@ impl SimulatedCPU {
 
     const DATA_PROCESSIG_INSTRUCTIONS: [
         fn(&SimulatedCPU, bool, RegNames, RegNames, ShifterOperand); 16
-        ] = [
+    ] = [
         SimulatedCPU::and, SimulatedCPU::eor, SimulatedCPU::sub,
         SimulatedCPU::rsb, SimulatedCPU::add, SimulatedCPU::adc,
         SimulatedCPU::sbc, SimulatedCPU::rsc, SimulatedCPU::tst,
