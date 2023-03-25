@@ -46,7 +46,7 @@ impl ShiftType {
                 false 
             },
             ShiftType::LSL | ShiftType::LSR | ShiftType::ASR | ShiftType::ROR
-            if amount != 0 => { 
+            if amount == 0 => { 
                 carry 
             },
             ShiftType::LSL => {
@@ -73,7 +73,7 @@ pub enum ShifterOperand {
 
 impl SimulatedCPU {
     // returns shifted value + carry flag
-    pub(super) fn perform_shift(&mut self, so: ShifterOperand) -> (i32, bool) {
+    pub(super) fn perform_shift(&self, so: ShifterOperand) -> (i32, bool) {
         let carry = self.flags[FlagNames::C];
 
         match so {
