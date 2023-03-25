@@ -7,112 +7,112 @@ impl SimulatedCPU {
         &self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
-        println!("and");
+        println!("and(s: {s}, rd: {:?}, rn: {:?}, so: {:?})", rd, rn, so);
     }
 
     pub(super) fn eor(
         &self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
-        println!("eor");
+        println!("eor(s: {s}, rd: {:?}, rn: {:?}, so: {:?})", rd, rn, so);
     }
 
     pub(super) fn sub(
         &self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
-        println!("sub");
+        println!("sub(s: {s}, rd: {:?}, rn: {:?}, so: {:?})", rd, rn, so);
     }
 
     pub(super) fn rsb(
         &self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
-        println!("rsb");
+        println!("rsb(s: {s}, rd: {:?}, rn: {:?}, so: {:?})", rd, rn, so);
     }
 
     pub(super) fn add(
         &self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
-        println!("add");
+        println!("add(s: {s}, rd: {:?}, rn: {:?}, so: {:?})", rd, rn, so);
     }
 
     pub(super) fn adc(
         &self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
-        println!("adc");
+        println!("adc(s: {s}, rd: {:?}, rn: {:?}, so: {:?})", rd, rn, so);
     }
 
     pub(super) fn sbc(
         &self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
-        println!("sbc");
+        println!("sbc(s: {s}, rd: {:?}, rn: {:?}, so: {:?})", rd, rn, so);
     }
 
     pub(super) fn rsc(
         &self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
-        println!("rsc");
+        println!("rsc(s: {s}, rd: {:?}, rn: {:?}, so: {:?})", rd, rn, so);
     }
 
     pub(super) fn tst(
         &self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
-        println!("tst");
+        println!("tst(s: {s}, rd: {:?}, rn: {:?}, so: {:?})", rd, rn, so);
     }
 
     pub(super) fn teq(
         &self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
-        println!("teq");
+        println!("teq(s: {s}, rd: {:?}, rn: {:?}, so: {:?})", rd, rn, so);
     }
 
     pub(super) fn cmp(
         &self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
-        println!("cmp");
+        println!("cmp(s: {s}, rd: {:?}, rn: {:?}, so: {:?})", rd, rn, so);
     }
 
     pub(super) fn cmn(
         &self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
-        println!("cmn");
+        println!("cmn(s: {s}, rd: {:?}, rn: {:?}, so: {:?})", rd, rn, so);
     }
 
     pub(super) fn orr(
         &self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
-        println!("orr");
+        println!("orr(s: {s}, rd: {:?}, rn: {:?}, so: {:?})", rd, rn, so);
     }
 
     pub(super) fn mov(
         &self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
-        println!("mov");
+        println!("mov(s: {s}, rd: {:?}, rn: {:?}, so: {:?})", rd, rn, so);
     }
 
     pub(super) fn bic(
         &self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
-        println!("bic");
+        println!("bic(s: {s}, rd: {:?}, rn: {:?}, so: {:?})", rd, rn, so);
     }
 
     pub(super) fn mvn(
         &self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
-        println!("mvn");
+        println!("mvn(s: {s}, rd: {:?}, rn: {:?}, so: {:?})", rd, rn, so);
     }
 
     // Miscellaneos 

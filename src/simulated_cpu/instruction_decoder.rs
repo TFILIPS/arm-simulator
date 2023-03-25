@@ -81,7 +81,7 @@ impl SimulatedCPU {
                         self, s, rn, rd, ShifterOperand::ImmediateShift { 
                             shift_amount: instruction.cut_bits(7..=11)
                                             .try_into().unwrap(), 
-                            shift: ShiftType::LSL, 
+                            shift: instruction.cut_bits(5..=6).into(), 
                             rm: instruction.cut_bits(0..=3).into()
                         }
                     );
@@ -91,7 +91,7 @@ impl SimulatedCPU {
                     SimulatedCPU::DATA_PROCESSIG_INSTRUCTIONS[opcode](
                         self, s, rn, rd, ShifterOperand::RegisterShift { 
                             rs: instruction.cut_bits(8..=11).into(), 
-                            shift: ShiftType::LSL, 
+                            shift: instruction.cut_bits(5..=6).into(), 
                             rm: instruction.cut_bits(0..=3).into()
                         }
                     );
@@ -125,21 +125,3 @@ impl SimulatedCPU {
     ];
 
 }
-
-//if instruction.cut_bits(26..=27) == 0b00 {
-//
-//    if instruction.cut_bits(23..=24) == 0b10 
-//        && instruction.get_bit(20) 
-//        && instruction.cut_bits(28..=31) != 0b1111 
-//        && !instruction.get_bit(25) 
-//        && instruction.get_bit(7)
-//        && instruction.get_bit(4) {
-//            panic!("Control and DSP instruction extension space")
-//    }
-//    if instruction.cut_bits(24..=27) == 0b0000
-//        && instruction.cut_bits(4..=7) == 0b1001
-//        && instruction.cut_bits(28..=31) != 0b1111 {
-//            panic!("Multiply instruction extension space")
-//    }
-//
-//    self.execute_data_processig_instruction(instruction);

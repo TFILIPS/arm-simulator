@@ -15,6 +15,8 @@ impl<T> IndexMut<FlagNames> for [T] {
         return &mut self[index as usize];
     }
 }
+
+#[derive(Debug)]
 #[repr(u32)]
 pub enum RegNames { 
     R0, R1, R2, R3, R4, R5, R6, 
