@@ -26,7 +26,7 @@ impl SimulatedCPU {
     }
 
     pub fn step(&mut self) {
-        let address: usize = self.registers[RegNames::PC] as u32 as usize;
+        let address: usize = self.registers[RegNames::PC] as u32 as usize - 8;
         // error when end of memory
         let instruction: &[u8] = &self.memory[address..address+4];
         let bits: u32 = slice_to_u32(&instruction, &self.encoding);

@@ -1,6 +1,6 @@
 use std::{mem::transmute};
 use crate::utils::BitAccess;
-use super::{SimulatedCPU, names::{FlagNames, RegNames}, barrel_shifter::{ShifterOperand, ShiftType}};
+use super::{SimulatedCPU, names::{FlagNames, RegNames}, barrel_shifter::ShifterOperand};
 
 #[repr(u32)]
 #[allow(dead_code)]
@@ -44,7 +44,7 @@ impl Condition {
 
 // https://developer.arm.com/documentation/ddi0406/c/Application-Level-Architecture/ARM-Instruction-Set-Encoding/ARM-instruction-set-encoding?lang=en
 impl SimulatedCPU {
-    pub(super) fn execute_instruction(&self, instruction: u32) {
+    pub(super) fn execute_instruction(&mut self, instruction: u32) {
         let cond: Condition = Condition::from_instruction(instruction);
         if !cond.is_satisfied(&self.flags) {
             return;
@@ -63,7 +63,7 @@ impl SimulatedCPU {
         }
     }
 
-    fn handle_data_and_miscellaneos(&self, instruction: u32) {
+    fn handle_data_and_miscellaneos(&mut self, instruction: u32) {
         let op: bool = instruction.get_bit(25);
         let op1: u32 = instruction.cut_bits(20..=24);
         let op2: u32 = instruction.cut_bits(4..=7);
@@ -114,7 +114,7 @@ impl SimulatedCPU {
     }
 
     const DATA_PROCESSIG_INSTRUCTIONS: [
-        fn(&SimulatedCPU, bool, RegNames, RegNames, ShifterOperand); 16
+        fn(&mut SimulatedCPU, bool, RegNames, RegNames, ShifterOperand); 16
     ] = [
         SimulatedCPU::and, SimulatedCPU::eor, SimulatedCPU::sub,
         SimulatedCPU::rsb, SimulatedCPU::add, SimulatedCPU::adc,

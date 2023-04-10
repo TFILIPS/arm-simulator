@@ -84,7 +84,7 @@ impl SimulatedCPU {
                     ShiftType::RRX.compute(value, 0, carry)
                 }
                 else {
-                    shift.compute(0, shift_amount, false)
+                    shift.compute(value, shift_amount, carry)
                 }
             },
             ShifterOperand::RegisterShift { rs, shift, rm } => {
