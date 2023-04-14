@@ -10,7 +10,7 @@ impl SimulatedCPU {
     pub(super) fn and(
         &mut self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
-    ) { 
+    ) {
         let a: i32 = self.get_register(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
 
@@ -282,7 +282,178 @@ impl SimulatedCPU {
         }
     }
 
-    // Miscellaneos
+    // Multiply instructions
+    pub(super) fn _mul() {
+        todo!()
+    }
+
+    pub(super) fn _mla() {
+        todo!()
+    }
+
+    pub(super) fn _smull() {
+        todo!()
+    }
+
+    pub(super) fn _umull() {
+        todo!()
+    }
+
+    pub(super) fn _smlal() {
+        todo!()
+    }
+
+    pub(super) fn _umlal() {
+        todo!()
+    }
+
+    // Miscellaneous arithmetic instructions
+    pub(super) fn clz(&mut self) {
+        //only mi in armv5
+        todo!()
+    }
+
+    // Branch instructions
+    pub(super) fn _b() {
+        todo!()
+    }
+
+    pub(super) fn _bl() {
+        todo!()
+    }
+
+    pub(super) fn blx(&mut self) {
+        todo!()
+    }
+
+    pub(super) fn bx(&mut self) {
+        todo!()
+    }
+
+    // Load and store instructions
+    pub(super) fn _ldr() {
+        todo!()
+    }
+
+    pub(super) fn _ldrb() {
+        todo!()
+    }
+
+    pub(super) fn _ldrbt() {
+        todo!()
+    }
+
+    pub(super) fn _ldrh() {
+        todo!()
+    }
+
+    pub(super) fn _ldrsb() {
+        todo!()
+    }
+
+    pub(super) fn _ldrsh() {
+        todo!()
+    }
+
+    pub(super) fn _ldrt() {
+        todo!()
+    }
+
+    pub(super) fn _str() {
+        todo!()
+    }
+
+    pub(super) fn _strb() {
+        todo!()
+    }
+
+    pub(super) fn _strbt() {
+        todo!()
+    }
+
+    pub(super) fn _strh() {
+        todo!()
+    }
+
+    pub(super) fn _strt() {
+        todo!()
+    }
+
+    pub(super) fn _ldm() {
+        todo!()
+    }
+
+    pub(super) fn _stm() {
+        todo!()
+    }
+
+    pub(super) fn _swp() {
+        todo!()
+    }
+
+    pub(super) fn _swpb() {
+        todo!()
+    }
+
+    // Exception-generating instructions
+    pub(super) fn _swi() {
+        todo!()
+    }
+
+    pub(super) fn bkpt(&mut self) {
+        todo!()
+    }
+
+    // Status register access instructions
+    pub(super) fn mrs(&mut self) {
+        todo!()
+    }
+
+    pub(super) fn msr(&mut self) {
+        todo!()
+    }
+
+
+    // Coprocessor instructions
+    pub(super) fn _cdp() {
+        panic!("Coprocessor instructions not supported!")
+    }
+
+    pub(super) fn _cdp2() {
+        panic!("Coprocessor instructions not supported!")
+    }
+
+    pub(super) fn _ldc() {
+        panic!("Coprocessor instructions not supported!")
+    }
+
+    pub(super) fn _ldc2() {
+        panic!("Coprocessor instructions not supported!")
+    }
+
+    pub(super) fn _mcr() {
+        panic!("Coprocessor instructions not supported!")
+    }
+
+    pub(super) fn _mcr2() {
+        panic!("Coprocessor instructions not supported!")
+    }
+
+    pub(super) fn _mrc() {
+        panic!("Coprocessor instructions not supported!")
+    }
+
+    pub(super) fn _mrc2() {
+        panic!("Coprocessor instructions not supported!")
+    }
+
+    pub(super) fn _stc() {
+        panic!("Coprocessor instructions not supported!")
+    }
+
+    pub(super) fn _stc2() {
+        panic!("Coprocessor instructions not supported!")
+    }
 }
 
 #[cfg(test)]
@@ -343,5 +514,3 @@ mod tests {
             (i32::MIN, -1, true, 0, i32::MAX, [false, false, true, true])
     }
 }
-
-
