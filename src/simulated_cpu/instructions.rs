@@ -11,6 +11,8 @@ impl SimulatedCPU {
         &mut self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
+        println!("and");
+
         let a: i32 = self.get_register(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
 
@@ -28,6 +30,8 @@ impl SimulatedCPU {
         &mut self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
+        println!("eor");
+
         let a: i32 = self.get_register(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
 
@@ -45,6 +49,8 @@ impl SimulatedCPU {
         &mut self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
+        println!("sub");
+        
         let a: i32 = self.get_register(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
@@ -63,6 +69,8 @@ impl SimulatedCPU {
         &mut self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
+        println!("rsb");
+
         let a: i32 = self.get_register(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
@@ -81,6 +89,8 @@ impl SimulatedCPU {
         &mut self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
+        println!("add");
+
         let a: i32 = self.get_register(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
@@ -100,6 +110,8 @@ impl SimulatedCPU {
         &mut self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
+        println!("adc");
+
         let a: i32 = self.get_register(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
         let c: i32 = if self.flags[FlagNames::C] {1} else {0};
@@ -122,6 +134,8 @@ impl SimulatedCPU {
         &mut self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
+        println!("sbc");
+
         let a: i32 = self.get_register(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
         let c: i32 = if self.flags[FlagNames::C] {0} else {1};
@@ -143,6 +157,8 @@ impl SimulatedCPU {
         &mut self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
+        println!("rsc");
+
         let a: i32 = self.get_register(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
         let c: i32 = if self.flags[FlagNames::C] {0} else {1};
@@ -163,7 +179,9 @@ impl SimulatedCPU {
     pub(super) fn tst(
         &mut self, _: bool, rn: RegNames, 
         _: RegNames, so: ShifterOperand
-    ) { 
+    ) {
+        println!("tst");
+
         let a: i32 = self.get_register(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
 
@@ -178,6 +196,8 @@ impl SimulatedCPU {
         &mut self, _: bool, rn: RegNames, 
         _: RegNames, so: ShifterOperand
     ) {
+        println!("teq");
+
         let a: i32 = self.get_register(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
 
@@ -192,6 +212,8 @@ impl SimulatedCPU {
         &mut self, _: bool, rn: RegNames, 
         _: RegNames, so: ShifterOperand
     ) {
+        println!("cmp");
+
         let a: i32 = self.get_register(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
@@ -207,6 +229,8 @@ impl SimulatedCPU {
         &mut self, _: bool, rn: RegNames, 
         _: RegNames, so: ShifterOperand
     ) {
+        println!("cmn");
+
         let a: i32 = self.get_register(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
@@ -222,6 +246,8 @@ impl SimulatedCPU {
         &mut self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
+        println!("orr");
+
         let a: i32 = self.get_register(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
 
@@ -239,6 +265,7 @@ impl SimulatedCPU {
         &mut self, s: bool, _: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
+        println!("mov");
 
         let (value, carry): (i32, bool) = self.perform_shift(so);
         self.set_register(rd, value);
@@ -254,6 +281,8 @@ impl SimulatedCPU {
         &mut self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
+        println!("bic");
+
         let a: i32 = self.get_register(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
 
@@ -271,6 +300,8 @@ impl SimulatedCPU {
         &mut self, s: bool, _: RegNames, 
         rd: RegNames, so: ShifterOperand
     ) {
+        println!("mvn");
+
         let (value, carry): (i32, bool) = self.perform_shift(so);
         let result: i32 = !value;
         self.set_register(rd, result);
@@ -283,27 +314,28 @@ impl SimulatedCPU {
     }
 
     // Multiply instructions
-    pub(super) fn _mul() {
+    pub(super) fn mul(&mut self) {
+        println!("mul");
+        
+    }
+
+    pub(super) fn mla(&mut self) {
         todo!()
     }
 
-    pub(super) fn _mla() {
+    pub(super) fn smull(&mut self) {
         todo!()
     }
 
-    pub(super) fn _smull() {
+    pub(super) fn umull(&mut self) {
         todo!()
     }
 
-    pub(super) fn _umull() {
+    pub(super) fn smlal(&mut self) {
         todo!()
     }
 
-    pub(super) fn _smlal() {
-        todo!()
-    }
-
-    pub(super) fn _umlal() {
+    pub(super) fn umlal(&mut self) {
         todo!()
     }
 
@@ -314,11 +346,11 @@ impl SimulatedCPU {
     }
 
     // Branch instructions
-    pub(super) fn _b() {
+    pub(super) fn b(&mut self) {
         todo!()
     }
 
-    pub(super) fn _bl() {
+    pub(super) fn bl(&mut self) {
         todo!()
     }
 
@@ -331,72 +363,72 @@ impl SimulatedCPU {
     }
 
     // Load and store instructions
-    pub(super) fn _ldr() {
+    pub(super) fn ldr(&mut self) {
         todo!()
     }
 
-    pub(super) fn _ldrb() {
+    pub(super) fn ldrb(&mut self) {
         todo!()
     }
 
-    pub(super) fn _ldrbt() {
+    pub(super) fn ldrbt(&mut self) {
         todo!()
     }
 
-    pub(super) fn _ldrh() {
+    pub(super) fn ldrh(&mut self) {
         todo!()
     }
 
-    pub(super) fn _ldrsb() {
+    pub(super) fn ldrsb(&mut self) {
         todo!()
     }
 
-    pub(super) fn _ldrsh() {
+    pub(super) fn ldrsh(&mut self) {
         todo!()
     }
 
-    pub(super) fn _ldrt() {
+    pub(super) fn ldrt(&mut self) {
         todo!()
     }
 
-    pub(super) fn _str() {
+    pub(super) fn str(&mut self) {
         todo!()
     }
 
-    pub(super) fn _strb() {
+    pub(super) fn strb(&mut self) {
         todo!()
     }
 
-    pub(super) fn _strbt() {
+    pub(super) fn strbt(&mut self) {
         todo!()
     }
 
-    pub(super) fn _strh() {
+    pub(super) fn strh(&mut self) {
         todo!()
     }
 
-    pub(super) fn _strt() {
+    pub(super) fn strt(&mut self) {
         todo!()
     }
 
-    pub(super) fn _ldm() {
+    pub(super) fn ldm(&mut self) {
         todo!()
     }
 
-    pub(super) fn _stm() {
+    pub(super) fn stm(&mut self) {
         todo!()
     }
 
-    pub(super) fn _swp() {
+    pub(super) fn swp(&mut self) {
         todo!()
     }
 
-    pub(super) fn _swpb() {
+    pub(super) fn swpb(&mut self) {
         todo!()
     }
 
     // Exception-generating instructions
-    pub(super) fn _swi() {
+    pub(super) fn swi(&mut self) {
         todo!()
     }
 
@@ -415,43 +447,43 @@ impl SimulatedCPU {
 
 
     // Coprocessor instructions
-    pub(super) fn _cdp() {
+    pub(super) fn cdp(&mut self) {
         panic!("Coprocessor instructions not supported!")
     }
 
-    pub(super) fn _cdp2() {
+    pub(super) fn cdp2(&mut self) {
         panic!("Coprocessor instructions not supported!")
     }
 
-    pub(super) fn _ldc() {
+    pub(super) fn ldc(&mut self) {
         panic!("Coprocessor instructions not supported!")
     }
 
-    pub(super) fn _ldc2() {
+    pub(super) fn ldc2(&mut self) {
         panic!("Coprocessor instructions not supported!")
     }
 
-    pub(super) fn _mcr() {
+    pub(super) fn mcr(&mut self) {
         panic!("Coprocessor instructions not supported!")
     }
 
-    pub(super) fn _mcr2() {
+    pub(super) fn mcr2(&mut self) {
         panic!("Coprocessor instructions not supported!")
     }
 
-    pub(super) fn _mrc() {
+    pub(super) fn mrc(&mut self) {
         panic!("Coprocessor instructions not supported!")
     }
 
-    pub(super) fn _mrc2() {
+    pub(super) fn mrc2(&mut self) {
         panic!("Coprocessor instructions not supported!")
     }
 
-    pub(super) fn _stc() {
+    pub(super) fn stc(&mut self) {
         panic!("Coprocessor instructions not supported!")
     }
 
-    pub(super) fn _stc2() {
+    pub(super) fn stc2(&mut self) {
         panic!("Coprocessor instructions not supported!")
     }
 }

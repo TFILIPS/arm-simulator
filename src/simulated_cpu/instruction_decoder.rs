@@ -1,6 +1,11 @@
-use std::{mem::transmute};
+use core::panic;
+use std::mem::transmute;
 use crate::utils::BitAccess;
-use super::{SimulatedCPU, names::{FlagNames, RegNames}, barrel_shifter::ShifterOperand};
+use super::{
+    SimulatedCPU, 
+    names::{FlagNames, RegNames}, 
+    barrel_shifter::ShifterOperand
+};
 
 #[repr(u32)]
 #[allow(dead_code)]
@@ -40,8 +45,6 @@ impl Condition {
     }
 }
 
-
-
 // https://developer.arm.com/documentation/ddi0406/c/Application-Level-Architecture/ARM-Instruction-Set-Encoding/ARM-instruction-set-encoding?lang=en
 impl SimulatedCPU {
     pub(super) fn execute_instruction(&mut self, instruction: u32) {
@@ -74,8 +77,8 @@ impl SimulatedCPU {
         let s: bool = instruction.get_bit(20);
 
         if !op {
-            if (op1 & 0b11001) ^ 0b10001 != 0 {
-                if (op2 & 0b0001) ^ 0b0000 == 0 {
+            if !bm(op1, 0b11001, 0b10000) {
+                if bm(op2, 0b0001, 0b0000) {
                     // Data-processing immediate shift
                     SimulatedCPU::DATA_PROCESSIG_INSTRUCTIONS[opcode](
                         self, s, rn, rd, ShifterOperand::ImmediateShift { 
@@ -86,7 +89,7 @@ impl SimulatedCPU {
                         }
                     );
                 }
-                else if (op2 & 0b1001) ^ 0b0001 == 0 {
+                else if bm(op2, 0b1001, 0b0001) {
                     // Data-processing register shift
                     SimulatedCPU::DATA_PROCESSIG_INSTRUCTIONS[opcode](
                         self, s, rn, rd, ShifterOperand::RegisterShift { 
@@ -97,9 +100,36 @@ impl SimulatedCPU {
                     );
                 }
             }
+            else {
+                if bm(op2, 0b1000, 0b0000) {
+                    self.handle_miscellaneos(instruction);
+                }
+                else if bm(op2, 0b1001, 0b1000) {
+                    // Halfword multiply and multiply accumulate
+                    panic!("Undefined in ARMv5!")
+                }
+            }
+
+            if bm(op2, 0b1111, 0b1001) {
+                if bm(op1, 0b10000, 0b00000) {
+                    self.handle_multiply(instruction);
+                }
+                else if bm(op1, 0b10000, 0b10000) {
+                    self.handle_synchronization(instruction);
+                }
+            }
+
+            if bm(op2, 0b10000, 0b00000) || bm(op2, 0b1111, 0b1001) {
+                if !bm(op1, 0b10010, 0b00010) {
+                    // Extra load/store instructions
+                }
+                else {
+                    // Extra load/store instructions, unprivileged
+                }
+            }
         }
         else {
-            if (op1 & 0b11001) ^ 0b10001 != 0 {
+            if !bm(op1, 0b11001, 0b10000) {
                 // Data-processing immediate
                 SimulatedCPU::DATA_PROCESSIG_INSTRUCTIONS[opcode](
                     self, s, rn, rd, ShifterOperand::Immediate { 
@@ -109,6 +139,15 @@ impl SimulatedCPU {
                                     .try_into().unwrap() 
                     }
                 );
+            }
+            else if bm(op1, 0b11111, 0b10000) {
+                //16-bit immediate load, MOV (immediate)
+            }
+            else if bm(op1, 0b11111, 0b10100) {
+                //High halfword 16-bit immediate load, MOVT
+            }
+            else if bm(op1, 0b11011, 0b10010) {
+                // MSR (immediate), and hints
             }
         }
     }
@@ -124,4 +163,60 @@ impl SimulatedCPU {
         SimulatedCPU::mvn
     ];
 
+    fn handle_miscellaneos(&mut self, instruction: u32) {
+        let op: u32 = instruction.cut_bits(21..=22);
+        let op2: u32 = instruction.cut_bits(4..=6);
+
+        match (op2, op) {
+            (0b000, 0b00 | 0b10) => self.mrs(),
+            (0b000, 0b01 | 0b11) => self.msr(),
+            (0b001, 0b01) => self.bx(),
+            (0b001, 0b11) => self.clz(),
+            (0b011, 0b01) => self.blx(),
+            (0b111, 0b01) => self.bkpt(),
+            (0b111, 0b11) | (0b010, 0b01) | (0b101, _) | 
+            (0b110, 0b11) | (0b111, 0b10) => panic!("Not supported by ARMv5!"),
+            _ => panic!("Undefined in ARMv5!")
+        }
+    }
+
+    fn handle_multiply(&mut self, instruction: u32) {
+        let op: u32 = instruction.cut_bits(21..=23);
+        let x: bool = instruction.get_bit(20);
+
+        match op {
+            0b000 => self.mul(),
+            0b001 => self.mla(),
+            0b100 => self.umull(),
+            0b101 => self.umlal(),
+            0b110 => self.smull(),
+            0b111 => self.smlal(),
+            0b010 | 0b011 if !x => panic!("Not supported by ARMv5"),
+            _ => panic!("Undefined")
+        }
+    }
+
+    fn handle_synchronization(&mut self, instruction: u32) {
+        if instruction.get_bit(23) {
+            panic!("Not supported by ARMv5");
+        }
+
+        if bm(instruction.cut_bits(20..=21), 0b11, 0b00) {
+            //maybe combine swp and swpb to one function lets first look at str and ldr
+            if instruction.get_bit(22) {
+                self.swpb();
+            }
+            else {
+                self.swp();
+            }
+        }
+        else {
+            panic!("Undefined")
+        }
+    }
+}
+
+//maybe trait for u32 or macro (so compiler inlines it)
+fn bm(value: u32, mask: u32, expectation: u32) -> bool {
+    (value & mask) ^ expectation == 0
 }
