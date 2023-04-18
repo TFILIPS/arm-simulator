@@ -16,7 +16,7 @@ impl<T> IndexMut<FlagNames> for [T] {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[repr(u32)]
 pub enum RegNames { 
     R0, R1, R2, R3, R4, R5, R6, 

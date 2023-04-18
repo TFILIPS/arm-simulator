@@ -1,6 +1,5 @@
 use core::panic;
 use std::mem::transmute;
-use super::{names::{RegNames, FlagNames}, SimulatedCPU};
 
 #[repr(u32)]
 #[derive(Debug)]
@@ -20,7 +19,7 @@ impl From<u32> for ShiftType {
 //improvements to be made: inplement bitacces for i32
 // be carefull when executing rxx from register: wrong results
 impl ShiftType {
-    pub fn compute(&self, value: i32, amount: u8, carry: bool) -> (i32, bool) {
+    pub(super) fn compute(&self, value: i32, amount: u8, carry: bool) -> (i32, bool) {
         let result: i32 = match self {
             ShiftType::LSL => {
                 value.checked_shl(amount as u32).unwrap_or(0)
@@ -64,37 +63,3 @@ impl ShiftType {
     }
 }
 
-#[derive(Debug)]
-pub enum ShifterOperand {
-    ImmediateShift { shift_amount: u8, shift: ShiftType, rm: RegNames },
-    RegisterShift { rs: RegNames, shift: ShiftType, rm: RegNames },
-    Immediate { rotate: u8, immediate: u8 }   
-}
-
-impl SimulatedCPU {
-    // returns shifted value + carry flag
-    pub(super) fn perform_shift(&self, so: ShifterOperand) -> (i32, bool) {
-        let carry = self.flags[FlagNames::C];
-
-        match so {
-            ShifterOperand::ImmediateShift { shift_amount, shift, rm } => {
-                let value: i32 = self.get_register(rm);
-
-                if let (ShiftType::ROR, 0) = (&shift, shift_amount) {
-                    ShiftType::RRX.compute(value, 0, carry)
-                }
-                else {
-                    shift.compute(value, shift_amount, carry)
-                }
-            },
-            ShifterOperand::RegisterShift { rs, shift, rm } => {
-                let value: i32 = self.get_register(rm);
-                let amount: u8 = self.get_register(rs) as u8;
-                shift.compute(value, amount, carry)
-            },
-            ShifterOperand::Immediate { rotate, immediate } => {
-                ShiftType::ROR.compute(immediate as i32, rotate * 2, carry)
-            },
-        }
-    } 
-}

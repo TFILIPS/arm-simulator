@@ -4,7 +4,7 @@ use crate::utils::BitAccess;
 use super::{
     SimulatedCPU, 
     names::{FlagNames, RegNames}, 
-    barrel_shifter::ShifterOperand
+    operands::ShifterOperand
 };
 
 #[repr(u32)]
@@ -171,8 +171,8 @@ impl SimulatedCPU {
             (0b000, 0b00 | 0b10) => self.mrs(),
             (0b000, 0b01 | 0b11) => self.msr(),
             (0b001, 0b01) => self.bx(),
-            (0b001, 0b11) => self.clz(),
-            (0b011, 0b01) => self.blx(),
+            //(0b001, 0b11) => self.clz(),
+            (0b011, 0b01) => self.blx(), //register variant
             (0b111, 0b01) => self.bkpt(),
             (0b111, 0b11) | (0b010, 0b01) | (0b101, _) | 
             (0b110, 0b11) | (0b111, 0b10) => panic!("Not supported by ARMv5!"),
@@ -185,12 +185,12 @@ impl SimulatedCPU {
         let x: bool = instruction.get_bit(20);
 
         match op {
-            0b000 => self.mul(),
-            0b001 => self.mla(),
-            0b100 => self.umull(),
-            0b101 => self.umlal(),
-            0b110 => self.smull(),
-            0b111 => self.smlal(),
+            0b000 => self.mul(false, RegNames::R0, RegNames::R0, RegNames::R0),
+            0b001 => self.mla(false, RegNames::R0, RegNames::R0, RegNames::R0, RegNames::R0),
+            //0b100 => self.umull(),
+            //0b101 => self.umlal(),
+            //0b110 => self.smull(),
+            //0b111 => self.smlal(),
             0b010 | 0b011 if !x => panic!("Not supported by ARMv5"),
             _ => panic!("Undefined")
         }
@@ -204,10 +204,10 @@ impl SimulatedCPU {
         if bm(instruction.cut_bits(20..=21), 0b11, 0b00) {
             //maybe combine swp and swpb to one function lets first look at str and ldr
             if instruction.get_bit(22) {
-                self.swpb();
+                //self.swpb();
             }
             else {
-                self.swp();
+                //self.swp();
             }
         }
         else {

@@ -1,12 +1,15 @@
+use std::{process::exit, ops::Range, iter::StepBy};
+
+use crate::utils::{slice_to_u32, BitAccess, slice_to_u16};
+
 use super::{
     SimulatedCPU, 
     names::{RegNames, FlagNames},
-    barrel_shifter::ShifterOperand
+    operands::{ShifterOperand, AddressingMode, AddressingModeMultiple}
 };
 
 impl SimulatedCPU {
     //data processing: doto r15 special behaviour
-
     pub(super) fn and(
         &mut self, s: bool, rn: RegNames, 
         rd: RegNames, so: ShifterOperand
@@ -314,176 +317,431 @@ impl SimulatedCPU {
     }
 
     // Multiply instructions
-    pub(super) fn mul(&mut self) {
+    pub(super) fn mul(
+        &mut self, s: bool, rd: RegNames, 
+        rs: RegNames, rm: RegNames 
+    ) {
         println!("mul");
-        
+
+        let a: i32 = self.get_register(rm);
+        let b: i32 = self.get_register(rs);
+
+        let result = a.wrapping_mul(b);
+        self.set_register(rd, result);
+
+        if s {
+            self.flags[FlagNames::N] = result < 0;
+            self.flags[FlagNames::Z] = result == 0;
+        }
     }
 
-    pub(super) fn mla(&mut self) {
-        todo!()
+    pub(super) fn mla(
+        &mut self, s: bool, rd: RegNames, rn: RegNames, 
+        rs: RegNames, rm: RegNames 
+    ) {
+        println!("mla");
+
+        let a: i32 = self.get_register(rm);
+        let b: i32 = self.get_register(rs);
+        let c: i32 = self.get_register(rn);
+
+        let result = a.wrapping_mul(b).wrapping_add(c);
+        self.set_register(rd, result);
+
+        if s {
+            self.flags[FlagNames::N] = result < 0;
+            self.flags[FlagNames::Z] = result == 0;
+        }
     }
 
-    pub(super) fn smull(&mut self) {
-        todo!()
+    pub(super) fn smull(
+        &mut self, s: bool, rdhi: RegNames, rdlo: RegNames,
+        rs: RegNames, rm: RegNames
+    ) {
+        println!("smull");
+
+        let a: i64 = self.get_register(rm) as i64;
+        let b: i64 = self.get_register(rs) as i64;
+
+        let result: i64 = a.wrapping_mul(b);
+        self.set_register(rdhi, (result >> 32) as i32);
+        self.set_register(rdlo, result as i32);
+
+        if s {
+            self.flags[FlagNames::N] = result < 0;
+            self.flags[FlagNames::Z] = result == 0;
+        }
     }
 
-    pub(super) fn umull(&mut self) {
-        todo!()
+    pub(super) fn umull(        
+        &mut self, s: bool, rdhi: RegNames, rdlo: RegNames,
+        rs: RegNames, rm: RegNames
+    ) {
+        println!("umull");
+
+        let a: u64 = self.get_register(rm) as u32 as u64;
+        let b: u64 = self.get_register(rs) as u32 as u64;
+
+        let result: i64 = a.wrapping_mul(b) as i64;
+
+        self.set_register(rdhi, (result >> 32) as i32);
+        self.set_register(rdlo, result as i32);
+
+        if s {
+            self.flags[FlagNames::N] = result < 0;
+            self.flags[FlagNames::Z] = result == 0;
+        }
     }
 
-    pub(super) fn smlal(&mut self) {
-        todo!()
+    pub(super) fn smlal(
+        &mut self, s: bool, rdhi: RegNames, rdlo: RegNames,
+        rs: RegNames, rm: RegNames
+    ) {
+        println!("smlal");
+
+        let a: i64 = self.get_register(rm) as i64;
+        let b: i64 = self.get_register(rs) as i64;
+        let c: i64 = (self.get_register(rdlo) as i64) 
+            + ((self.get_register(rdhi) as i64) << 32);
+
+        let result: i64 = a.wrapping_mul(b).wrapping_add(c);
+        self.set_register(rdhi, (result >> 32) as i32);
+        self.set_register(rdlo, result as i32);
+
+        if s {
+            self.flags[FlagNames::N] = result < 0;
+            self.flags[FlagNames::Z] = result == 0;
+        }
     }
 
-    pub(super) fn umlal(&mut self) {
-        todo!()
+    pub(super) fn umlal(
+        &mut self, s: bool, rdhi: RegNames, rdlo: RegNames,
+        rs: RegNames, rm: RegNames
+    ) {
+        println!("umlal");
+
+        let a: u64 = self.get_register(rm) as u32 as u64;
+        let b: u64 = self.get_register(rs) as u32 as u64;
+        let c: i64 = (self.get_register(rdlo) as i64) 
+            + ((self.get_register(rdhi) as i64) << 32);
+
+        let result: i64 = (a.wrapping_mul(b) as i64).wrapping_add(c);
+        self.set_register(rdhi, (result >> 32) as i32);
+        self.set_register(rdlo, result as i32);
+
+        if s {
+            self.flags[FlagNames::N] = result < 0;
+            self.flags[FlagNames::Z] = result == 0;
+        }
     }
 
     // Miscellaneous arithmetic instructions
-    pub(super) fn clz(&mut self) {
-        //only mi in armv5
-        todo!()
+    pub(super) fn clz(&mut self, rd: RegNames, rm: RegNames) {
+        println!("clz");
+
+        let a: i32 = self.get_register(rm);
+
+        let result: i32 = a.leading_zeros() as i32;
+        self.set_register(rd, result);
     }
 
     // Branch instructions
-    pub(super) fn b(&mut self) {
-        todo!()
-    }
+    pub(super) fn b(&mut self, l: bool, si: i32) {
+        println!("{:}", if l {"bl"} else {"l"});
 
-    pub(super) fn bl(&mut self) {
-        todo!()
+        let prog_addr: i32 = self.get_register(RegNames::PC);
+
+        if l {
+            let link_addr: i32 = prog_addr.wrapping_add(4);
+            self.set_register(RegNames::LR, link_addr);
+        }
+
+        let new_prog_addr = prog_addr.wrapping_add(si << 2);
+        self.set_register(RegNames::PC, new_prog_addr);
     }
 
     pub(super) fn blx(&mut self) {
-        todo!()
+        // This behaviour is incorrect! After switching to 
+        // Thumb state on a non T CPU the next executed instruction
+        // causes an UndefinedInstructionExeption. Then the cpu
+        // switches back to ARM.
+        panic!("Thumb instruction set not supported!");
     }
 
     pub(super) fn bx(&mut self) {
-        todo!()
+        // This behaviour is incorrect! After switching to 
+        // Thumb state on a non T CPU the next executed instruction
+        // causes an UndefinedInstructionExeption. Then the cpu
+        // switches back to ARM.
+        panic!("Thumb instruction set not supported!");
     }
 
     // Load and store instructions
-    pub(super) fn ldr(&mut self) {
-        todo!()
+    pub(super) fn ldr(
+        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
+    ) {
+        println!("ldr"); //need to check if last two bits are ignored
+
+        let mut address: usize = self.compute_modify_address(rn, am);
+        let rot_bits: u32 = (address as u32).cut_bits(0..=1);
+        address &= 0xFFFFFFFC;
+
+        // what happens when overshooting memory boundary
+        let bytes: &[u8] = &self.memory[address..address+4];
+        let mut value: u32 = slice_to_u32(bytes, &self.encoding);
+        value = value.rotate_right(rot_bits);
+
+        if let RegNames::PC = rd {
+            value &= 0xFFFFFFFE;
+            //set T bit when lsb is 1
+        }
+        self.set_register(rd, value as i32);
     }
 
-    pub(super) fn ldrb(&mut self) {
-        todo!()
+    pub(super) fn ldrb(
+        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
+    ) {
+        println!("ldrb");
+
+        let address: usize = self.compute_modify_address(rn, am);
+        let value: u32 = self.memory[address] as u32;
+        self.set_register(rd, value as i32);
     }
 
-    pub(super) fn ldrbt(&mut self) {
-        todo!()
+    pub(super) fn ldrbt(
+        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
+    ) { self.ldrb(rn, rd, am); }
+
+    pub(super) fn ldrh(
+        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
+    ) {
+        // what happens when overshooting memory boundary
+        // unpredictable when not alligned
+        let address: usize = self.compute_modify_address(rn, am);
+        let bytes: &[u8] = &self.memory[address..address+2];
+        let value: u32 = slice_to_u16(bytes, &self.encoding) as u32;
+        self.set_register(rd, value as i32);
     }
 
-    pub(super) fn ldrh(&mut self) {
-        todo!()
+    pub(super) fn ldrsb(
+        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
+    ) {
+        println!("ldrsb");
+
+        let address: usize = self.compute_modify_address(rn, am);
+        let value: i32 = self.memory[address] as i32;
+        self.set_register(rd, value);
     }
 
-    pub(super) fn ldrsb(&mut self) {
-        todo!()
+    pub(super) fn ldrsh(
+        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
+    ) {
+        println!("ldrsh");
+
+        let address: usize = self.compute_modify_address(rn, am);
+        let bytes: &[u8] = &self.memory[address..address+2];
+        let value: i32 = slice_to_u16(bytes, &self.encoding) as i32;
+        self.set_register(rd, value);
     }
 
-    pub(super) fn ldrsh(&mut self) {
-        todo!()
+    pub(super) fn ldrt(
+        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
+    ) { self.ldr(rn, rd, am); }
+
+    pub(super) fn str(
+        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
+    ) {
+        println!("str");
+
+        let mut address: usize = self.compute_modify_address(rn, am);
+        address &= 0xFFFFFFFC;
+
+        // export in utils
+        let value = self.get_register(rd);
+        let bytes: [u8; 4] = match self.encoding {
+            crate::utils::Endian::Little => value.to_le_bytes(),
+            crate::utils::Endian::Big => value.to_be_bytes(),
+        };
+        
+        self.memory.splice(address..address+4, bytes);
     }
 
-    pub(super) fn ldrt(&mut self) {
-        todo!()
+    pub(super) fn strb(
+        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
+    ) {
+        println!("strb");
+
+        let address: usize = self.compute_modify_address(rn, am);
+        let value: u8 = self.get_register(rd) as u8;
+        self.memory[address] = value;
     }
 
-    pub(super) fn str(&mut self) {
-        todo!()
+    pub(super) fn strbt(
+        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
+    ) { self.strb(rn, rd, am); }
+
+    pub(super) fn strh(
+        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
+    ) {
+        println!("str");
+
+        let address: usize = self.compute_modify_address(rn, am);
+
+        let value: i16 = self.get_register(rd) as i16;
+        let bytes: [u8; 2] = match self.encoding {
+            crate::utils::Endian::Little => value.to_le_bytes(),
+            crate::utils::Endian::Big => value.to_be_bytes(),
+        };
+        
+        self.memory.splice(address..address+2, bytes);
     }
 
-    pub(super) fn strb(&mut self) {
-        todo!()
+    pub(super) fn strt(
+        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
+    ) { self.str(rn, rd, am); }
+
+    pub(super) fn ldm(&mut self, amm: AddressingModeMultiple) {
+        println!("ldm");
+
+        let mut addresses: StepBy<Range<usize>> = 
+            self.compute_modify_address_multiple(&amm);
+
+        for i in 0..16 {
+            if amm.register_list.get_bit(i) {
+                let address: usize = addresses.next().unwrap() & 0xFFFFFFFC;
+                let bytes: &[u8] = &self.memory[address..address+4];
+                let mut value: u32 = slice_to_u32(bytes, &self.encoding);
+                if i == 15 {
+                    value &= 0xFFFFFFFE;
+                    //set T bit
+                }
+                self.registers[i] = value as i32;
+            }
+        }
     }
 
-    pub(super) fn strbt(&mut self) {
-        todo!()
+    pub(super) fn stm(&mut self, amm: AddressingModeMultiple) {
+        println!("stm");
+
+        let mut addresses: StepBy<Range<usize>> = 
+            self.compute_modify_address_multiple(&amm);
+
+        for i in 0..16 {
+            if amm.register_list.get_bit(i) {
+                let address: usize = addresses.next().unwrap() & 0xFFFFFFFC;
+                
+                let value = self.registers[i];
+                let bytes: [u8; 4] = match self.encoding {
+                    crate::utils::Endian::Little => value.to_le_bytes(),
+                    crate::utils::Endian::Big => value.to_be_bytes(),
+                };
+                self.memory.splice(address..address+4, bytes);
+            }
+        }
     }
 
-    pub(super) fn strh(&mut self) {
-        todo!()
+    pub(super) fn swp(&mut self, rn: RegNames, rd: RegNames, rm: RegNames) {
+        println!("swp");
+
+        let mut address: usize = self.get_register(rn) as u32 as usize;
+        let rot_bits: u32 = (address as u32).cut_bits(0..=1);
+        address &= 0xFFFFFFFC;
+
+        let bytes: &[u8] = &self.memory[address..address+4];
+        let mut lv: u32 = slice_to_u32(bytes, &self.encoding);
+        lv = lv.rotate_right(rot_bits);
+
+        let sv: i32 = self.get_register(rm);
+        let bytes: [u8; 4] = match self.encoding {
+            crate::utils::Endian::Little => sv.to_le_bytes(),
+            crate::utils::Endian::Big => sv.to_be_bytes(),
+        };
+        
+        self.memory.splice(address..address+4, bytes);
+        self.set_register(rd, lv as i32);
     }
 
-    pub(super) fn strt(&mut self) {
-        todo!()
-    }
+    pub(super) fn swpb(&mut self, rn: RegNames, rd: RegNames, rm: RegNames) {
+        println!("swpb");
 
-    pub(super) fn ldm(&mut self) {
-        todo!()
-    }
+        let address: usize = self.get_register(rn) as u32 as usize;
 
-    pub(super) fn stm(&mut self) {
-        todo!()
-    }
-
-    pub(super) fn swp(&mut self) {
-        todo!()
-    }
-
-    pub(super) fn swpb(&mut self) {
-        todo!()
+        let lv: u8 = self.memory[address];
+        let sv: u8 = self.get_register(rm) as u8;
+        
+        self.memory[address] = sv;
+        self.set_register(rd, lv as i32);
     }
 
     // Exception-generating instructions
     pub(super) fn swi(&mut self) {
-        todo!()
+        match (self.get_register(RegNames::R0), self.get_register(RegNames::R7)) {
+            (1, 4) => {
+                let len = self.get_register(RegNames::R2);
+                let addr = self.get_register(RegNames::R1);
+
+                for i in addr..addr + len {
+                    print!("{:#}", self.memory[i as usize] as char);
+                }
+            },
+            (0, 1) => exit(0),
+            (_, _) => ()
+        }
     }
 
     pub(super) fn bkpt(&mut self) {
-        todo!()
+        // stop execution in webinterface
+        // meanwhile do nothing
     }
 
     // Status register access instructions
     pub(super) fn mrs(&mut self) {
-        todo!()
+        panic!("Register not supported yet!")
     }
 
     pub(super) fn msr(&mut self) {
-        todo!()
+        panic!("Register not supported yet!")
     }
 
 
     // Coprocessor instructions
-    pub(super) fn cdp(&mut self) {
+    pub(super) fn _cdp(&mut self) {
         panic!("Coprocessor instructions not supported!")
     }
 
-    pub(super) fn cdp2(&mut self) {
+    pub(super) fn _cdp2(&mut self) {
         panic!("Coprocessor instructions not supported!")
     }
 
-    pub(super) fn ldc(&mut self) {
+    pub(super) fn _ldc(&mut self) {
         panic!("Coprocessor instructions not supported!")
     }
 
-    pub(super) fn ldc2(&mut self) {
+    pub(super) fn _ldc2(&mut self) {
         panic!("Coprocessor instructions not supported!")
     }
 
-    pub(super) fn mcr(&mut self) {
+    pub(super) fn _mcr(&mut self) {
         panic!("Coprocessor instructions not supported!")
     }
 
-    pub(super) fn mcr2(&mut self) {
+    pub(super) fn _mcr2(&mut self) {
         panic!("Coprocessor instructions not supported!")
     }
 
-    pub(super) fn mrc(&mut self) {
+    pub(super) fn _mrc(&mut self) {
         panic!("Coprocessor instructions not supported!")
     }
 
-    pub(super) fn mrc2(&mut self) {
+    pub(super) fn _mrc2(&mut self) {
         panic!("Coprocessor instructions not supported!")
     }
 
-    pub(super) fn stc(&mut self) {
+    pub(super) fn _stc(&mut self) {
         panic!("Coprocessor instructions not supported!")
     }
 
-    pub(super) fn stc2(&mut self) {
+    pub(super) fn _stc2(&mut self) {
         panic!("Coprocessor instructions not supported!")
     }
 }
@@ -493,7 +751,7 @@ mod tests {
     use crate::simulated_cpu::{
         SimulatedCPU, 
         RegNames, 
-        barrel_shifter::{ShifterOperand, ShiftType}
+        operands::{ShifterOperand, barrel_shifter::ShiftType}
     };
 
     macro_rules! data_processing_tests {

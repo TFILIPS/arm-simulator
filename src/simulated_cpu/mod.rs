@@ -4,7 +4,7 @@ use crate::utils::*;
 pub mod names;
 mod instruction_decoder;
 mod instructions;
-mod barrel_shifter;
+mod operands;
 
 pub const MEMORY_SIZE: usize = 2usize.pow(26);
 
@@ -41,6 +41,7 @@ impl SimulatedCPU {
         &mut self.memory
     }
 
+    // maybe &register then remove copy trait of RegNames
     pub fn set_register(&mut self, register: RegNames, value: i32) {
         self.registers[register] = value;
     }
