@@ -27,7 +27,7 @@ pub fn slice_to_u32(slice: &[u8], encoding: &Endian) -> u32 {
 
 pub trait BitAccess {
    fn get_bit(&self, index: usize) -> bool;
-   fn cut_bits<T: RangeBounds<usize>>(&self, range: T) -> u32;
+   fn cut_bits<T: RangeBounds<usize>>(&self, range: T) -> Self;
 }
 
 //todo error handling
@@ -50,6 +50,29 @@ impl BitAccess for u32 {
         };
 
         let lshift: usize = 31 - end;
+        (*self << lshift) >> (start + lshift)
+    }
+}
+
+impl BitAccess for u16 {
+    fn get_bit(&self, index: usize) -> bool {
+        *self >> index & 1 == 1
+    }
+
+    fn cut_bits<T: RangeBounds<usize>>(&self, range: T) -> u16 {
+        let start = match range.start_bound() {
+            Bound::Included(&x) => x,
+            Bound::Excluded(&x) => x + 1,
+            Bound::Unbounded => 0,
+        };
+
+        let end = match range.end_bound() {
+            Bound::Included(&x) => x,
+            Bound::Excluded(&x) => x - 1,
+            Bound::Unbounded => 15,
+        };
+
+        let lshift: usize = 15 - end;
         (*self << lshift) >> (start + lshift)
     }
 }
