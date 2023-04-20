@@ -1,5 +1,6 @@
 use std::{ops::{Index, IndexMut}, mem::transmute};
 
+#[derive(Debug, Clone, Copy)]
 pub enum FlagNames { 
     N, Z, C, V 
 }
@@ -35,7 +36,7 @@ impl<T> IndexMut<RegNames> for [T] {
         return &mut self[index as usize];
     }
 }
-// allow convertion from u32 to RegNames
+// Allow convertion from u32 to RegNames
 impl From<u32> for RegNames {
     fn from(value: u32) -> Self {
         const NUM_REGISTERS: u32 = 16;

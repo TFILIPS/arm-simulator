@@ -1,11 +1,12 @@
-use core::panic;
 use std::mem::transmute;
 
 #[repr(u32)]
 #[derive(Debug)]
 #[allow(dead_code)]
-pub enum ShiftType { LSL, LSR, ASR, ROR, RRX } //RRX is special case of ROR
-// allow convertion from u32 to ShiftType
+pub enum ShiftType { 
+    LSL, LSR, ASR, ROR, RRX //RRX is special case of ROR
+} 
+// Allow convertion from u32 to ShiftType
 impl From<u32> for ShiftType {
     fn from(value: u32) -> Self {
         const NUM_SHIFTS: u32 = 5;
@@ -16,10 +17,11 @@ impl From<u32> for ShiftType {
     }
 }
 
-//improvements to be made: inplement bitacces for i32
-// be carefull when executing rxx from register: wrong results
 impl ShiftType {
-    pub(super) fn compute(&self, value: i32, amount: u8, carry: bool) -> (i32, bool) {
+    pub(super) fn compute(
+        &self, value: i32, amount: u8, carry: bool
+    ) -> (i32, bool) {
+        
         let result: i32 = match self {
             ShiftType::LSL => {
                 value.checked_shl(amount as u32).unwrap_or(0)
@@ -39,12 +41,13 @@ impl ShiftType {
             }
         };
 
+        //possible improvement: inplement bitacces for i32
         let new_carry: bool = match self {
             ShiftType::LSL | ShiftType::LSR | ShiftType::ASR 
             if amount > 32 => { 
                 false 
             },
-            ShiftType::LSL | ShiftType::LSR | ShiftType::ASR | ShiftType::ROR
+            ShiftType::LSL | ShiftType::LSR | ShiftType::ASR | ShiftType::ROR 
             if amount == 0 => { 
                 carry 
             },

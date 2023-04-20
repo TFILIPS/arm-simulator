@@ -15,28 +15,25 @@ pub enum ShifterOperand {
 #[derive(Debug)]
 pub enum AddressingMode {
     Immediate { p: bool, u: bool, w: bool, offset: u16 },
+    // this is basically the same as ScaledRegister with 0 for shift parameters
     Register { p: bool, u: bool, w: bool, rm: RegNames },
     ScaledRegister { p: bool, u: bool, w: bool, 
         shift_imm: u8, shift: ShiftType, rm: RegNames }
 }
 
+#[derive(Debug)]
 pub struct AddressingModeMultiple { 
-    pub p: bool, 
-    pub u: bool, 
-    pub w: bool, 
-    pub rn: RegNames,
-    pub register_list: u16
+    pub(super) p: bool, pub(super) u: bool, pub(super) w: bool, 
+    pub(super) rn: RegNames, pub(super) register_list: u16
 }
 
 impl SimulatedCPU {
-    // returns shifted value + carry flag
+    // returns shifted value + possibly new carry flag
     pub(super) fn perform_shift(&self, so: ShifterOperand) -> (i32, bool) {
         let carry = self.flags[FlagNames::C];
-
         match so {
             ShifterOperand::ImmediateShift { shift_amount, shift, rm } => {
                 let value: i32 = self.get_register(rm);
-
                 if let (ShiftType::ROR, 0) = (&shift, shift_amount) {
                     ShiftType::RRX.compute(value, 0, carry)
                 }
@@ -81,7 +78,7 @@ impl SimulatedCPU {
         };
 
         let op = if u {u32::wrapping_add} else {u32::wrapping_sub};
-
+        
         let address: u32;
         if p {
             address = op(self.get_register(rn) as u32, offset);
@@ -90,9 +87,6 @@ impl SimulatedCPU {
             }
         }
         else {
-            // Incorrect behaviour when simulating more than one mode
-            // see ARM Architecture Reference Manual A5-19
-            // But this should be done be the instruction decoder
             address = self.get_register(rn) as u32;
             self.set_register(rn, op(address, offset) as i32);
         }
