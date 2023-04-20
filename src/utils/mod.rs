@@ -1,5 +1,8 @@
 use std::ops::{Bound, RangeBounds};
 
+pub const F: bool = false;
+pub const T: bool = true;
+
 #[derive(Debug, Clone, Copy)]
 pub enum Endian { Little, Big }
 
@@ -25,30 +28,36 @@ pub fn slice_to_u32(slice: &[u8], encoding: &Endian) -> u32 {
     }
 }
 
+pub fn u16_to_array(value: u16, encoding: &Endian) -> [u8; 2] {
+    match encoding {
+        crate::utils::Endian::Little => value.to_le_bytes(),
+        crate::utils::Endian::Big => value.to_be_bytes(),
+    }
+}
+
+pub fn u32_to_array(value: u32, encoding: &Endian) -> [u8; 4] {
+    match encoding {
+        crate::utils::Endian::Little => value.to_le_bytes(),
+        crate::utils::Endian::Big => value.to_be_bytes(),
+    }
+}
+
+
 pub trait BitAccess {
    fn get_bit(&self, index: usize) -> bool;
    fn cut_bits<T: RangeBounds<usize>>(&self, range: T) -> Self;
 }
 
-//todo error handling
 impl BitAccess for u32 {
     fn get_bit(&self, index: usize) -> bool {
+        if index >= 32 {
+            panic!("Provided index is to large! index >= 32");
+        }
         *self >> index & 1 == 1
     }
 
     fn cut_bits<T: RangeBounds<usize>>(&self, range: T) -> u32 {
-        let start = match range.start_bound() {
-            Bound::Included(&x) => x,
-            Bound::Excluded(&x) => x + 1,
-            Bound::Unbounded => 0,
-        };
-
-        let end = match range.end_bound() {
-            Bound::Included(&x) => x,
-            Bound::Excluded(&x) => x - 1,
-            Bound::Unbounded => 31,
-        };
-
+        let (start, end) = get_bounds(range, 31);
         let lshift: usize = 31 - end;
         (*self << lshift) >> (start + lshift)
     }
@@ -56,23 +65,41 @@ impl BitAccess for u32 {
 
 impl BitAccess for u16 {
     fn get_bit(&self, index: usize) -> bool {
+        if index >= 16 {
+            panic!("Provided index is to large! index >= 16");
+        }
         *self >> index & 1 == 1
     }
 
     fn cut_bits<T: RangeBounds<usize>>(&self, range: T) -> u16 {
-        let start = match range.start_bound() {
-            Bound::Included(&x) => x,
-            Bound::Excluded(&x) => x + 1,
-            Bound::Unbounded => 0,
-        };
-
-        let end = match range.end_bound() {
-            Bound::Included(&x) => x,
-            Bound::Excluded(&x) => x - 1,
-            Bound::Unbounded => 15,
-        };
-
+        let (start, end) = get_bounds(range, 15);
         let lshift: usize = 15 - end;
         (*self << lshift) >> (start + lshift)
     }
+}
+
+fn get_bounds<T: RangeBounds<usize>>(range: T, max: usize) -> (usize, usize) {
+    let start = match range.start_bound() {
+        Bound::Included(&x) => x,
+        Bound::Excluded(&x) => x + 1,
+        Bound::Unbounded => 0
+    };
+    if start > max {
+        panic!("Provided start index is to large! index > {max}");
+    }
+
+    let end = match range.end_bound() {
+        Bound::Included(&x) => x,
+        Bound::Excluded(&x) if x > 0 => x - 1,
+        Bound::Excluded(_) => panic!("Provided end index is negative!"),
+        Bound::Unbounded => max
+    };
+    if end > max {
+        panic!("Provided end index is to large! index > {max}");
+    }
+    
+    if start > end {
+        panic!("The start index is larger than the end index! {start} > {end}");
+    }
+    (start, end)
 }
