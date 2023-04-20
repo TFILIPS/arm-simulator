@@ -6,11 +6,11 @@ use crate::utils::Endian;
 mod headers;
 
 // Defined values every ELF file header has to contain
-pub const ELF_ID: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
-pub const HEADER_VERSION_KEY: u8 = 0x1;
+const ELF_ID: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
+const HEADER_VERSION_KEY: u8 = 0x1;
 const ELF_VERSION_KEY: u32 = 0x1;
 
-// Modifiable values: For this program we want an 32-bit ARM executable
+// Modifiable values: For this project we want an 32-bit ARM executable
 const CLASS_KEY: u8 = 0x1; // 32-Bit
 const MACHINE_KEY: u16 = 0x28; // ARM
 const ELF_TYPE_KEY: u16 = 0x2; // executeable
