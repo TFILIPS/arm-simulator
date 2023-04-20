@@ -1,6 +1,6 @@
 use std::{process::exit, ops::Range, iter::StepBy};
 
-use crate::utils::{slice_to_u32, BitAccess, slice_to_u16};
+use crate::utils::{slice_to_u32, BitAccess, slice_to_u16, u32_to_array, u16_to_array};
 
 use super::{
     SimulatedCPU, 
@@ -8,13 +8,14 @@ use super::{
     operands::{ShifterOperand, AddressingMode, AddressingModeMultiple}
 };
 
+const DEBUG_PRINT: bool = false;
+
+//improvements: access registers directly as done with the flags
 impl SimulatedCPU {
-    //data processing: doto r15 special behaviour
     pub(super) fn and(
-        &mut self, s: bool, rn: RegNames, 
-        rd: RegNames, so: ShifterOperand
+        &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
     ) {
-        println!("and");
+        if DEBUG_PRINT { println!("and"); }
 
         let a: i32 = self.get_register(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
@@ -30,10 +31,9 @@ impl SimulatedCPU {
     }
 
     pub(super) fn eor(
-        &mut self, s: bool, rn: RegNames, 
-        rd: RegNames, so: ShifterOperand
+        &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
     ) {
-        println!("eor");
+        if DEBUG_PRINT { println!("eor"); }
 
         let a: i32 = self.get_register(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
@@ -49,10 +49,9 @@ impl SimulatedCPU {
     }
 
     pub(super) fn sub(
-        &mut self, s: bool, rn: RegNames, 
-        rd: RegNames, so: ShifterOperand
+        &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
     ) {
-        println!("sub");
+        if DEBUG_PRINT { println!("sub"); }
         
         let a: i32 = self.get_register(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
@@ -69,10 +68,9 @@ impl SimulatedCPU {
     }
 
     pub(super) fn rsb(
-        &mut self, s: bool, rn: RegNames, 
-        rd: RegNames, so: ShifterOperand
+        &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
     ) {
-        println!("rsb");
+        if DEBUG_PRINT { println!("rsb"); }
 
         let a: i32 = self.get_register(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
@@ -89,10 +87,9 @@ impl SimulatedCPU {
     }
 
     pub(super) fn add(
-        &mut self, s: bool, rn: RegNames, 
-        rd: RegNames, so: ShifterOperand
+        &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
     ) {
-        println!("add");
+        if DEBUG_PRINT { println!("add"); }
 
         let a: i32 = self.get_register(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
@@ -109,11 +106,10 @@ impl SimulatedCPU {
     }
 
 
-    pub(super) fn adc(//difficulties getting carry and overflow (not sure if this is 100% correct)
-        &mut self, s: bool, rn: RegNames, 
-        rd: RegNames, so: ShifterOperand
+    pub(super) fn adc(
+        &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
     ) {
-        println!("adc");
+        if DEBUG_PRINT { println!("adc"); }
 
         let a: i32 = self.get_register(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
@@ -133,11 +129,10 @@ impl SimulatedCPU {
         }
     }
 
-    pub(super) fn sbc( //kapitel über casrry flag bei c instructions
-        &mut self, s: bool, rn: RegNames, 
-        rd: RegNames, so: ShifterOperand
+    pub(super) fn sbc(
+        &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
     ) {
-        println!("sbc");
+        if DEBUG_PRINT { println!("sbc"); }
 
         let a: i32 = self.get_register(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
@@ -150,17 +145,16 @@ impl SimulatedCPU {
         if s {
             self.flags[FlagNames::N] = result < 0;
             self.flags[FlagNames::Z] = result == 0;
-            self.flags[FlagNames::C]
-                = (result as u32) <= (a as u32) && (b != 0 || c != 0);
+            self.flags[FlagNames::C] = 
+                (result as u32) <= (a as u32) && (b != 0 || c != 0);
             self.flags[FlagNames::V] = o1 || o2;
         }
     }
 
     pub(super) fn rsc(
-        &mut self, s: bool, rn: RegNames, 
-        rd: RegNames, so: ShifterOperand
+        &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
     ) {
-        println!("rsc");
+        if DEBUG_PRINT { println!("rsc"); }
 
         let a: i32 = self.get_register(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
@@ -180,10 +174,9 @@ impl SimulatedCPU {
     }
 
     pub(super) fn tst(
-        &mut self, _: bool, rn: RegNames, 
-        _: RegNames, so: ShifterOperand
+        &mut self, _: bool, rn: RegNames, _: RegNames, so: ShifterOperand
     ) {
-        println!("tst");
+        if DEBUG_PRINT { println!("tst"); }
 
         let a: i32 = self.get_register(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
@@ -196,10 +189,9 @@ impl SimulatedCPU {
     }
 
     pub(super) fn teq(
-        &mut self, _: bool, rn: RegNames, 
-        _: RegNames, so: ShifterOperand
+        &mut self, _: bool, rn: RegNames, _: RegNames, so: ShifterOperand
     ) {
-        println!("teq");
+        if DEBUG_PRINT { println!("teq"); }
 
         let a: i32 = self.get_register(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
@@ -212,10 +204,9 @@ impl SimulatedCPU {
     }
 
     pub(super) fn cmp(
-        &mut self, _: bool, rn: RegNames, 
-        _: RegNames, so: ShifterOperand
+        &mut self, _: bool, rn: RegNames, _: RegNames, so: ShifterOperand
     ) {
-        println!("cmp");
+        if DEBUG_PRINT { println!("cmp"); }
 
         let a: i32 = self.get_register(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
@@ -229,10 +220,9 @@ impl SimulatedCPU {
     }
 
     pub(super) fn cmn(
-        &mut self, _: bool, rn: RegNames, 
-        _: RegNames, so: ShifterOperand
+        &mut self, _: bool, rn: RegNames, _: RegNames, so: ShifterOperand
     ) {
-        println!("cmn");
+        if DEBUG_PRINT { println!("cmn"); }
 
         let a: i32 = self.get_register(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
@@ -246,10 +236,9 @@ impl SimulatedCPU {
     }
 
     pub(super) fn orr(
-        &mut self, s: bool, rn: RegNames, 
-        rd: RegNames, so: ShifterOperand
+        &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
     ) {
-        println!("orr");
+        if DEBUG_PRINT { println!("orr"); }
 
         let a: i32 = self.get_register(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
@@ -265,10 +254,9 @@ impl SimulatedCPU {
     }
 
     pub(super) fn mov(
-        &mut self, s: bool, _: RegNames, 
-        rd: RegNames, so: ShifterOperand
+        &mut self, s: bool, _: RegNames, rd: RegNames, so: ShifterOperand
     ) {
-        println!("mov");
+        if DEBUG_PRINT { println!("mov"); }
 
         let (value, carry): (i32, bool) = self.perform_shift(so);
         self.set_register(rd, value);
@@ -281,10 +269,9 @@ impl SimulatedCPU {
     }
 
     pub(super) fn bic(
-        &mut self, s: bool, rn: RegNames, 
-        rd: RegNames, so: ShifterOperand
+        &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
     ) {
-        println!("bic");
+        if DEBUG_PRINT { println!("bic"); }
 
         let a: i32 = self.get_register(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
@@ -300,10 +287,9 @@ impl SimulatedCPU {
     }
 
     pub(super) fn mvn(
-        &mut self, s: bool, _: RegNames, 
-        rd: RegNames, so: ShifterOperand
+        &mut self, s: bool, _: RegNames, rd: RegNames, so: ShifterOperand
     ) {
-        println!("mvn");
+        if DEBUG_PRINT { println!("mvn"); }
 
         let (value, carry): (i32, bool) = self.perform_shift(so);
         let result: i32 = !value;
@@ -316,12 +302,12 @@ impl SimulatedCPU {
         }
     }
 
+
     // Multiply instructions
     pub(super) fn mul(
-        &mut self, s: bool, rd: RegNames, 
-        rs: RegNames, rm: RegNames 
+        &mut self, s: bool, rd: RegNames, rs: RegNames, rm: RegNames 
     ) {
-        println!("mul");
+        if DEBUG_PRINT { println!("mul"); }
 
         let a: i32 = self.get_register(rm);
         let b: i32 = self.get_register(rs);
@@ -339,7 +325,7 @@ impl SimulatedCPU {
         &mut self, s: bool, rd: RegNames, rn: RegNames, 
         rs: RegNames, rm: RegNames 
     ) {
-        println!("mla");
+        if DEBUG_PRINT { println!("mla"); }
 
         let a: i32 = self.get_register(rm);
         let b: i32 = self.get_register(rs);
@@ -358,7 +344,7 @@ impl SimulatedCPU {
         &mut self, s: bool, rdhi: RegNames, rdlo: RegNames,
         rs: RegNames, rm: RegNames
     ) {
-        println!("smull");
+        if DEBUG_PRINT { println!("smull"); }
 
         let a: i64 = self.get_register(rm) as i64;
         let b: i64 = self.get_register(rs) as i64;
@@ -377,7 +363,7 @@ impl SimulatedCPU {
         &mut self, s: bool, rdhi: RegNames, rdlo: RegNames,
         rs: RegNames, rm: RegNames
     ) {
-        println!("umull");
+        if DEBUG_PRINT { println!("umull"); }
 
         let a: u64 = self.get_register(rm) as u32 as u64;
         let b: u64 = self.get_register(rs) as u32 as u64;
@@ -397,7 +383,7 @@ impl SimulatedCPU {
         &mut self, s: bool, rdhi: RegNames, rdlo: RegNames,
         rs: RegNames, rm: RegNames
     ) {
-        println!("smlal");
+        if DEBUG_PRINT { println!("smlal"); }
 
         let a: i64 = self.get_register(rm) as i64;
         let b: i64 = self.get_register(rs) as i64;
@@ -418,7 +404,7 @@ impl SimulatedCPU {
         &mut self, s: bool, rdhi: RegNames, rdlo: RegNames,
         rs: RegNames, rm: RegNames
     ) {
-        println!("umlal");
+        if DEBUG_PRINT { println!("umlal"); }
 
         let a: u64 = self.get_register(rm) as u32 as u64;
         let b: u64 = self.get_register(rs) as u32 as u64;
@@ -435,28 +421,30 @@ impl SimulatedCPU {
         }
     }
 
+
     // Miscellaneous arithmetic instructions
     pub(super) fn clz(&mut self, rd: RegNames, rm: RegNames) {
-        println!("clz");
+        if DEBUG_PRINT { println!("clz"); }
 
         let a: i32 = self.get_register(rm);
 
         let result: i32 = a.leading_zeros() as i32;
         self.set_register(rd, result);
     }
+    
 
     // Branch instructions
     pub(super) fn b(&mut self, l: bool, si: i32) {
-        println!("{:}", if l {"bl"} else {"l"});
+        if DEBUG_PRINT { println!("{:}", if l {"bl"} else {"b"}); }
 
         let prog_addr: i32 = self.get_register(RegNames::PC);
 
         if l {
-            let link_addr: i32 = prog_addr.wrapping_add(4);
+            let link_addr: i32 = prog_addr;
             self.set_register(RegNames::LR, link_addr);
         }
 
-        let new_prog_addr = prog_addr.wrapping_add(si << 2);
+        let new_prog_addr = prog_addr.wrapping_add((si << 2) + 4); //<- dont know why add 4 here but it works!
         self.set_register(RegNames::PC, new_prog_addr);
     }
 
@@ -468,32 +456,35 @@ impl SimulatedCPU {
         panic!("Thumb instruction set not supported!");
     }
 
-    pub(super) fn bx(&mut self) {
+    pub(super) fn bx(&mut self, rm: RegNames) {
         // This behaviour is incorrect! After switching to 
         // Thumb state on a non T CPU the next executed instruction
         // causes an UndefinedInstructionExeption. Then the cpu
         // switches back to ARM.
-        panic!("Thumb instruction set not supported!");
+        if DEBUG_PRINT { println!("bx"); }
+        let target = self.get_register(rm);
+        self.set_register(RegNames::PC, target);
     }
+
 
     // Load and store instructions
     pub(super) fn ldr(
         &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
     ) {
-        println!("ldr"); //need to check if last two bits are ignored
+        if DEBUG_PRINT { println!("ldr"); }
 
         let mut address: usize = self.compute_modify_address(rn, am);
         let rot_bits: u32 = (address as u32).cut_bits(0..=1);
         address &= 0xFFFFFFFC;
 
-        // what happens when overshooting memory boundary
+        // improvement: memory boundary check
         let bytes: &[u8] = &self.memory[address..address+4];
         let mut value: u32 = slice_to_u32(bytes, &self.encoding);
         value = value.rotate_right(rot_bits);
 
         if let RegNames::PC = rd {
             value &= 0xFFFFFFFE;
-            //set T bit when lsb is 1
+            //set T bit when LSB is 1
         }
         self.set_register(rd, value as i32);
     }
@@ -501,7 +492,7 @@ impl SimulatedCPU {
     pub(super) fn ldrb(
         &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
     ) {
-        println!("ldrb");
+        if DEBUG_PRINT { println!("ldrb"); }
 
         let address: usize = self.compute_modify_address(rn, am);
         let value: u32 = self.memory[address] as u32;
@@ -515,8 +506,8 @@ impl SimulatedCPU {
     pub(super) fn ldrh(
         &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
     ) {
-        // what happens when overshooting memory boundary
-        // unpredictable when not alligned
+        if DEBUG_PRINT { println!("ldrh"); }
+
         let address: usize = self.compute_modify_address(rn, am);
         let bytes: &[u8] = &self.memory[address..address+2];
         let value: u32 = slice_to_u16(bytes, &self.encoding) as u32;
@@ -526,7 +517,7 @@ impl SimulatedCPU {
     pub(super) fn ldrsb(
         &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
     ) {
-        println!("ldrsb");
+        if DEBUG_PRINT { println!("ldrsb"); }
 
         let address: usize = self.compute_modify_address(rn, am);
         let value: i32 = self.memory[address] as i32;
@@ -536,7 +527,7 @@ impl SimulatedCPU {
     pub(super) fn ldrsh(
         &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
     ) {
-        println!("ldrsh");
+        if DEBUG_PRINT { println!("ldrsh"); }
 
         let address: usize = self.compute_modify_address(rn, am);
         let bytes: &[u8] = &self.memory[address..address+2];
@@ -551,17 +542,13 @@ impl SimulatedCPU {
     pub(super) fn str(
         &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
     ) {
-        println!("str");
+        if DEBUG_PRINT { println!("str"); }
 
         let mut address: usize = self.compute_modify_address(rn, am);
         address &= 0xFFFFFFFC;
 
-        // export in utils
-        let value = self.get_register(rd);
-        let bytes: [u8; 4] = match self.encoding {
-            crate::utils::Endian::Little => value.to_le_bytes(),
-            crate::utils::Endian::Big => value.to_be_bytes(),
-        };
+        let value = self.get_register(rd) as u32;
+        let bytes: [u8; 4] = u32_to_array(value, &self.encoding);
         
         self.memory.splice(address..address+4, bytes);
     }
@@ -569,7 +556,7 @@ impl SimulatedCPU {
     pub(super) fn strb(
         &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
     ) {
-        println!("strb");
+        if DEBUG_PRINT { println!("strb"); }
 
         let address: usize = self.compute_modify_address(rn, am);
         let value: u8 = self.get_register(rd) as u8;
@@ -583,15 +570,12 @@ impl SimulatedCPU {
     pub(super) fn strh(
         &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
     ) {
-        println!("str");
+        if DEBUG_PRINT { println!("str"); }
 
         let address: usize = self.compute_modify_address(rn, am);
 
-        let value: i16 = self.get_register(rd) as i16;
-        let bytes: [u8; 2] = match self.encoding {
-            crate::utils::Endian::Little => value.to_le_bytes(),
-            crate::utils::Endian::Big => value.to_be_bytes(),
-        };
+        let value: u16 = self.get_register(rd) as u16;
+        let bytes: [u8; 2] = u16_to_array(value, &self.encoding);
         
         self.memory.splice(address..address+2, bytes);
     }
@@ -601,7 +585,7 @@ impl SimulatedCPU {
     ) { self.str(rn, rd, am); }
 
     pub(super) fn ldm(&mut self, amm: AddressingModeMultiple) {
-        println!("ldm");
+        if DEBUG_PRINT { println!("ldm"); }
 
         let mut addresses: StepBy<Range<usize>> = 
             self.compute_modify_address_multiple(&amm);
@@ -613,7 +597,7 @@ impl SimulatedCPU {
                 let mut value: u32 = slice_to_u32(bytes, &self.encoding);
                 if i == 15 {
                     value &= 0xFFFFFFFE;
-                    //set T bit
+                    //set T bit when LSB is 1
                 }
                 self.registers[i] = value as i32;
             }
@@ -621,7 +605,7 @@ impl SimulatedCPU {
     }
 
     pub(super) fn stm(&mut self, amm: AddressingModeMultiple) {
-        println!("stm");
+        if DEBUG_PRINT { println!("stm"); }
 
         let mut addresses: StepBy<Range<usize>> = 
             self.compute_modify_address_multiple(&amm);
@@ -641,7 +625,7 @@ impl SimulatedCPU {
     }
 
     pub(super) fn swp(&mut self, rn: RegNames, rd: RegNames, rm: RegNames) {
-        println!("swp");
+        if DEBUG_PRINT { println!("swp"); }
 
         let mut address: usize = self.get_register(rn) as u32 as usize;
         let rot_bits: u32 = (address as u32).cut_bits(0..=1);
@@ -651,18 +635,15 @@ impl SimulatedCPU {
         let mut lv: u32 = slice_to_u32(bytes, &self.encoding);
         lv = lv.rotate_right(rot_bits);
 
-        let sv: i32 = self.get_register(rm);
-        let bytes: [u8; 4] = match self.encoding {
-            crate::utils::Endian::Little => sv.to_le_bytes(),
-            crate::utils::Endian::Big => sv.to_be_bytes(),
-        };
+        let sv: u32 = self.get_register(rm) as u32;
+        let bytes: [u8; 4] = u32_to_array(sv, &self.encoding);
         
         self.memory.splice(address..address+4, bytes);
         self.set_register(rd, lv as i32);
     }
 
     pub(super) fn swpb(&mut self, rn: RegNames, rd: RegNames, rm: RegNames) {
-        println!("swpb");
+        if DEBUG_PRINT { println!("swpb"); }
 
         let address: usize = self.get_register(rn) as u32 as usize;
 
@@ -675,24 +656,24 @@ impl SimulatedCPU {
 
     // Exception-generating instructions
     pub(super) fn swi(&mut self) {
+        if DEBUG_PRINT { println!("swi"); }
         match (self.get_register(RegNames::R0), self.get_register(RegNames::R7)) {
             (1, 4) => {
-                let len = self.get_register(RegNames::R2);
-                let addr = self.get_register(RegNames::R1);
-
-                for i in addr..addr + len {
-                    print!("{:#}", self.memory[i as usize] as char);
-                }
+                let len = self.get_register(RegNames::R2) as u32 as usize;
+                let addr = self.get_register(RegNames::R1) as u32 as usize;
+                print!("{:#}", String::from_utf8_lossy(&self.memory[addr..addr+len]));
             },
-            (0, 1) => exit(0),
+            (x, 1) => exit(x),
             (_, _) => ()
         }
     }
 
     pub(super) fn bkpt(&mut self) {
+        if DEBUG_PRINT { println!("bkpt") }
         // stop execution in webinterface
         // meanwhile do nothing
     }
+
 
     // Status register access instructions
     pub(super) fn mrs(&mut self) {
@@ -745,6 +726,7 @@ impl SimulatedCPU {
         panic!("Coprocessor instructions not supported!")
     }
 }
+
 
 #[cfg(test)]
 mod tests {
