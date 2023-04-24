@@ -18,7 +18,7 @@ fn main() {
     elf_file.check_header_values().unwrap_or_else(print_and_exit);
     
     let mut cpu: SimulatedCPU = SimulatedCPU::new();
-    cpu.set_register(RegNames::PC, (elf_file.get_entry_point() + 8) as i32);
+    cpu.set_register(RegNames::PC, elf_file.get_entry_point() as i32);
     cpu.set_register(RegNames::SP, 0x4000);
     cpu.set_encoding(elf_file.get_encoding());
 

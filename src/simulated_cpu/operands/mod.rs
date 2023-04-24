@@ -33,7 +33,7 @@ impl SimulatedCPU {
         let carry = self.flags[FlagNames::C];
         match so {
             ShifterOperand::ImmediateShift { shift_amount, shift, rm } => {
-                let value: i32 = self.get_register(rm);
+                let value: i32 = self.get_register_intern(rm);
                 if let (ShiftType::ROR, 0) = (&shift, shift_amount) {
                     ShiftType::RRX.compute(value, 0, carry)
                 }
@@ -42,8 +42,8 @@ impl SimulatedCPU {
                 }
             },
             ShifterOperand::RegisterShift { rs, shift, rm } => {
-                let value: i32 = self.get_register(rm);
-                let amount: u8 = self.get_register(rs) as u8;
+                let value: i32 = self.get_register_intern(rm);
+                let amount: u8 = self.get_register_intern(rs) as u8;
                 shift.compute(value, amount, carry)
             },
             ShifterOperand::Immediate { rotate, immediate } => {
@@ -60,12 +60,12 @@ impl SimulatedCPU {
                 (p, u, w, offset as u32)
             },
             AddressingMode::Register { p, u, w, rm } => {
-                (p, u, w, self.get_register(rm) as u32)
+                (p, u, w, self.get_register_intern(rm) as u32)
             },
             AddressingMode::ScaledRegister { 
                 p, u, w, shift_imm, shift, rm 
             } => {
-                let value: i32 = self.get_register(rm);
+                let value: i32 = self.get_register_intern(rm);
                 let carry: bool = self.flags[FlagNames::C];
                 
                 if let (ShiftType::ROR, 0) = (&shift, shift_imm) {
@@ -81,13 +81,13 @@ impl SimulatedCPU {
         
         let address: u32;
         if p {
-            address = op(self.get_register(rn) as u32, offset);
+            address = op(self.get_register_intern(rn) as u32, offset);
             if w {
                 self.set_register(rn, address as i32);
             }
         }
         else {
-            address = self.get_register(rn) as u32;
+            address = self.get_register_intern(rn) as u32;
             self.set_register(rn, op(address, offset) as i32);
         }
         address as usize
@@ -96,7 +96,7 @@ impl SimulatedCPU {
     pub fn compute_modify_address_multiple(
         &mut self, amm: &AddressingModeMultiple
     ) -> StepBy<Range<usize>> {
-        let base_address: usize = self.get_register(amm.rn) as usize;
+        let base_address: usize = self.get_register_intern(amm.rn) as usize;
         
         let op = if amm.u {usize::wrapping_add} else {usize::wrapping_sub};
         let num_regs: u32 = amm.register_list.count_ones();

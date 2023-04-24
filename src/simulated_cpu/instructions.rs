@@ -17,7 +17,7 @@ impl SimulatedCPU {
     ) {
         if DEBUG_PRINT { println!("and"); }
 
-        let a: i32 = self.get_register(rn);
+        let a: i32 = self.get_register_intern(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
 
         let result: i32 = a & b;
@@ -35,7 +35,7 @@ impl SimulatedCPU {
     ) {
         if DEBUG_PRINT { println!("eor"); }
 
-        let a: i32 = self.get_register(rn);
+        let a: i32 = self.get_register_intern(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
 
         let result: i32 = a ^ b;
@@ -53,7 +53,7 @@ impl SimulatedCPU {
     ) {
         if DEBUG_PRINT { println!("sub"); }
         
-        let a: i32 = self.get_register(rn);
+        let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
         let (result,  overflow): (i32, bool) = a.overflowing_sub(b);
@@ -72,7 +72,7 @@ impl SimulatedCPU {
     ) {
         if DEBUG_PRINT { println!("rsb"); }
 
-        let a: i32 = self.get_register(rn);
+        let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
         let (result,  overflow): (i32, bool) = b.overflowing_sub(a);
@@ -91,7 +91,7 @@ impl SimulatedCPU {
     ) {
         if DEBUG_PRINT { println!("add"); }
 
-        let a: i32 = self.get_register(rn);
+        let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
         let (result,  overflow): (i32, bool) = a.overflowing_add(b);
@@ -111,7 +111,7 @@ impl SimulatedCPU {
     ) {
         if DEBUG_PRINT { println!("adc"); }
 
-        let a: i32 = self.get_register(rn);
+        let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
         let c: i32 = if self.flags[FlagNames::C] {1} else {0};
 
@@ -134,7 +134,7 @@ impl SimulatedCPU {
     ) {
         if DEBUG_PRINT { println!("sbc"); }
 
-        let a: i32 = self.get_register(rn);
+        let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
         let c: i32 = if self.flags[FlagNames::C] {0} else {1};
 
@@ -156,7 +156,7 @@ impl SimulatedCPU {
     ) {
         if DEBUG_PRINT { println!("rsc"); }
 
-        let a: i32 = self.get_register(rn);
+        let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
         let c: i32 = if self.flags[FlagNames::C] {0} else {1};
 
@@ -178,7 +178,7 @@ impl SimulatedCPU {
     ) {
         if DEBUG_PRINT { println!("tst"); }
 
-        let a: i32 = self.get_register(rn);
+        let a: i32 = self.get_register_intern(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
 
         let result: i32 = a & b;
@@ -193,7 +193,7 @@ impl SimulatedCPU {
     ) {
         if DEBUG_PRINT { println!("teq"); }
 
-        let a: i32 = self.get_register(rn);
+        let a: i32 = self.get_register_intern(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
 
         let result: i32 = a ^ b;
@@ -208,7 +208,7 @@ impl SimulatedCPU {
     ) {
         if DEBUG_PRINT { println!("cmp"); }
 
-        let a: i32 = self.get_register(rn);
+        let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
         let (result,  overflow): (i32, bool) = a.overflowing_sub(b);
@@ -224,7 +224,7 @@ impl SimulatedCPU {
     ) {
         if DEBUG_PRINT { println!("cmn"); }
 
-        let a: i32 = self.get_register(rn);
+        let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
         let (result,  overflow): (i32, bool) = a.overflowing_add(b);
@@ -240,7 +240,7 @@ impl SimulatedCPU {
     ) {
         if DEBUG_PRINT { println!("orr"); }
 
-        let a: i32 = self.get_register(rn);
+        let a: i32 = self.get_register_intern(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
 
         let result: i32 = a | b;
@@ -273,7 +273,7 @@ impl SimulatedCPU {
     ) {
         if DEBUG_PRINT { println!("bic"); }
 
-        let a: i32 = self.get_register(rn);
+        let a: i32 = self.get_register_intern(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
 
         let result: i32 = a & !b;
@@ -309,8 +309,8 @@ impl SimulatedCPU {
     ) {
         if DEBUG_PRINT { println!("mul"); }
 
-        let a: i32 = self.get_register(rm);
-        let b: i32 = self.get_register(rs);
+        let a: i32 = self.get_register_intern(rm);
+        let b: i32 = self.get_register_intern(rs);
 
         let result = a.wrapping_mul(b);
         self.set_register(rd, result);
@@ -327,9 +327,9 @@ impl SimulatedCPU {
     ) {
         if DEBUG_PRINT { println!("mla"); }
 
-        let a: i32 = self.get_register(rm);
-        let b: i32 = self.get_register(rs);
-        let c: i32 = self.get_register(rn);
+        let a: i32 = self.get_register_intern(rm);
+        let b: i32 = self.get_register_intern(rs);
+        let c: i32 = self.get_register_intern(rn);
 
         let result = a.wrapping_mul(b).wrapping_add(c);
         self.set_register(rd, result);
@@ -346,8 +346,8 @@ impl SimulatedCPU {
     ) {
         if DEBUG_PRINT { println!("smull"); }
 
-        let a: i64 = self.get_register(rm) as i64;
-        let b: i64 = self.get_register(rs) as i64;
+        let a: i64 = self.get_register_intern(rm) as i64;
+        let b: i64 = self.get_register_intern(rs) as i64;
 
         let result: i64 = a.wrapping_mul(b);
         self.set_register(rdhi, (result >> 32) as i32);
@@ -365,8 +365,8 @@ impl SimulatedCPU {
     ) {
         if DEBUG_PRINT { println!("umull"); }
 
-        let a: u64 = self.get_register(rm) as u32 as u64;
-        let b: u64 = self.get_register(rs) as u32 as u64;
+        let a: u64 = self.get_register_intern(rm) as u32 as u64;
+        let b: u64 = self.get_register_intern(rs) as u32 as u64;
 
         let result: i64 = a.wrapping_mul(b) as i64;
 
@@ -385,10 +385,10 @@ impl SimulatedCPU {
     ) {
         if DEBUG_PRINT { println!("smlal"); }
 
-        let a: i64 = self.get_register(rm) as i64;
-        let b: i64 = self.get_register(rs) as i64;
-        let c: i64 = (self.get_register(rdlo) as i64) 
-            + ((self.get_register(rdhi) as i64) << 32);
+        let a: i64 = self.get_register_intern(rm) as i64;
+        let b: i64 = self.get_register_intern(rs) as i64;
+        let c: i64 = (self.get_register_intern(rdlo) as i64) 
+            + ((self.get_register_intern(rdhi) as i64) << 32);
 
         let result: i64 = a.wrapping_mul(b).wrapping_add(c);
         self.set_register(rdhi, (result >> 32) as i32);
@@ -406,10 +406,10 @@ impl SimulatedCPU {
     ) {
         if DEBUG_PRINT { println!("umlal"); }
 
-        let a: u64 = self.get_register(rm) as u32 as u64;
-        let b: u64 = self.get_register(rs) as u32 as u64;
-        let c: i64 = (self.get_register(rdlo) as i64) 
-            + ((self.get_register(rdhi) as i64) << 32);
+        let a: u64 = self.get_register_intern(rm) as u32 as u64;
+        let b: u64 = self.get_register_intern(rs) as u32 as u64;
+        let c: i64 = (self.get_register_intern(rdlo) as i64) 
+            + ((self.get_register_intern(rdhi) as i64) << 32);
 
         let result: i64 = (a.wrapping_mul(b) as i64).wrapping_add(c);
         self.set_register(rdhi, (result >> 32) as i32);
@@ -426,7 +426,7 @@ impl SimulatedCPU {
     pub(super) fn clz(&mut self, rd: RegNames, rm: RegNames) {
         if DEBUG_PRINT { println!("clz"); }
 
-        let a: i32 = self.get_register(rm);
+        let a: i32 = self.get_register_intern(rm);
 
         let result: i32 = a.leading_zeros() as i32;
         self.set_register(rd, result);
@@ -437,14 +437,14 @@ impl SimulatedCPU {
     pub(super) fn b(&mut self, l: bool, si: i32) {
         if DEBUG_PRINT { println!("{:}", if l {"bl"} else {"b"}); }
 
-        let prog_addr: i32 = self.get_register(RegNames::PC);
+        let prog_addr: i32 = self.get_register_intern(RegNames::PC);
 
         if l {
-            let link_addr: i32 = prog_addr;
+            let link_addr: i32 = prog_addr.wrapping_sub(4);
             self.set_register(RegNames::LR, link_addr);
         }
 
-        let new_prog_addr = prog_addr.wrapping_add((si << 2) + 4); //<- dont know why add 4 here but it works!
+        let new_prog_addr = prog_addr.wrapping_add(si << 2);
         self.set_register(RegNames::PC, new_prog_addr);
     }
 
@@ -462,7 +462,8 @@ impl SimulatedCPU {
         // causes an UndefinedInstructionExeption. Then the cpu
         // switches back to ARM.
         if DEBUG_PRINT { println!("bx"); }
-        let target = self.get_register(rm);
+
+        let target = self.get_register_intern(rm);
         self.set_register(RegNames::PC, target);
     }
 
@@ -547,7 +548,7 @@ impl SimulatedCPU {
         let mut address: usize = self.compute_modify_address(rn, am);
         address &= 0xFFFFFFFC;
 
-        let value = self.get_register(rd) as u32;
+        let value = self.get_register_intern(rd) as u32;
         let bytes: [u8; 4] = u32_to_array(value, &self.encoding);
         
         self.memory.splice(address..address+4, bytes);
@@ -559,7 +560,7 @@ impl SimulatedCPU {
         if DEBUG_PRINT { println!("strb"); }
 
         let address: usize = self.compute_modify_address(rn, am);
-        let value: u8 = self.get_register(rd) as u8;
+        let value: u8 = self.get_register_intern(rd) as u8;
         self.memory[address] = value;
     }
 
@@ -574,7 +575,7 @@ impl SimulatedCPU {
 
         let address: usize = self.compute_modify_address(rn, am);
 
-        let value: u16 = self.get_register(rd) as u16;
+        let value: u16 = self.get_register_intern(rd) as u16;
         let bytes: [u8; 2] = u16_to_array(value, &self.encoding);
         
         self.memory.splice(address..address+2, bytes);
@@ -599,7 +600,8 @@ impl SimulatedCPU {
                     value &= 0xFFFFFFFE;
                     //set T bit when LSB is 1
                 }
-                self.registers[i] = value as i32;
+                let reg_name: RegNames = (i as u32).into();
+                self.set_register(reg_name, value as i32);
             }
         }
     }
@@ -614,7 +616,9 @@ impl SimulatedCPU {
             if amm.register_list.get_bit(i) {
                 let address: usize = addresses.next().unwrap() & 0xFFFFFFFC;
                 
-                let value = self.registers[i];
+                let reg_name: RegNames = (i as u32).into();
+                let value = self.get_register_intern(reg_name);
+
                 let bytes: [u8; 4] = match self.encoding {
                     crate::utils::Endian::Little => value.to_le_bytes(),
                     crate::utils::Endian::Big => value.to_be_bytes(),
@@ -627,7 +631,7 @@ impl SimulatedCPU {
     pub(super) fn swp(&mut self, rn: RegNames, rd: RegNames, rm: RegNames) {
         if DEBUG_PRINT { println!("swp"); }
 
-        let mut address: usize = self.get_register(rn) as u32 as usize;
+        let mut address: usize = self.get_register_intern(rn) as u32 as usize;
         let rot_bits: u32 = (address as u32).cut_bits(0..=1);
         address &= 0xFFFFFFFC;
 
@@ -635,7 +639,7 @@ impl SimulatedCPU {
         let mut lv: u32 = slice_to_u32(bytes, &self.encoding);
         lv = lv.rotate_right(rot_bits);
 
-        let sv: u32 = self.get_register(rm) as u32;
+        let sv: u32 = self.get_register_intern(rm) as u32;
         let bytes: [u8; 4] = u32_to_array(sv, &self.encoding);
         
         self.memory.splice(address..address+4, bytes);
@@ -645,10 +649,10 @@ impl SimulatedCPU {
     pub(super) fn swpb(&mut self, rn: RegNames, rd: RegNames, rm: RegNames) {
         if DEBUG_PRINT { println!("swpb"); }
 
-        let address: usize = self.get_register(rn) as u32 as usize;
+        let address: usize = self.get_register_intern(rn) as u32 as usize;
 
         let lv: u8 = self.memory[address];
-        let sv: u8 = self.get_register(rm) as u8;
+        let sv: u8 = self.get_register_intern(rm) as u8;
         
         self.memory[address] = sv;
         self.set_register(rd, lv as i32);
@@ -657,10 +661,10 @@ impl SimulatedCPU {
     // Exception-generating instructions
     pub(super) fn swi(&mut self) {
         if DEBUG_PRINT { println!("swi"); }
-        match (self.get_register(RegNames::R0), self.get_register(RegNames::R7)) {
+        match (self.get_register_intern(RegNames::R0), self.get_register_intern(RegNames::R7)) {
             (1, 4) => {
-                let len = self.get_register(RegNames::R2) as u32 as usize;
-                let addr = self.get_register(RegNames::R1) as u32 as usize;
+                let len = self.get_register_intern(RegNames::R2) as u32 as usize;
+                let addr = self.get_register_intern(RegNames::R1) as u32 as usize;
                 print!("{:#}", String::from_utf8_lossy(&self.memory[addr..addr+len]));
             },
             (x, 1) => exit(x),
@@ -752,7 +756,7 @@ mod tests {
                     shift_amount: shift
                 };
                 cpu.$function(s, RegNames::R1, RegNames::R0, so);
-                assert_eq!(exp_res, cpu.get_register(RegNames::R0));
+                assert_eq!(exp_res, cpu.get_register_intern(RegNames::R0));
                 assert_eq!(exp_flags, cpu.flags);
             }
         )*}
