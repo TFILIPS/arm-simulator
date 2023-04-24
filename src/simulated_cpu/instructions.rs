@@ -1,6 +1,9 @@
 use std::{process::exit, ops::Range, iter::StepBy};
 
-use crate::utils::{slice_to_u32, BitAccess, slice_to_u16, u32_to_array, u16_to_array};
+use crate::utils::{
+    slice_to_u32, BitAccess, slice_to_u16, 
+    u32_to_array, u16_to_array
+};
 
 use super::{
     SimulatedCPU, 
@@ -81,7 +84,7 @@ impl SimulatedCPU {
         if s {
             self.flags[FlagNames::N] = result < 0;
             self.flags[FlagNames::Z] = result == 0;
-            self.flags[FlagNames::C] = (result as u32) < (a as u32);
+            self.flags[FlagNames::C] = (result as u32) < (b as u32);
             self.flags[FlagNames::V] = overflow;
         }
     }
@@ -777,16 +780,72 @@ mod tests {
     }
 
     data_processing_tests! {
+        function: eor,
+        eor_test_1: 
+            (0b1011101, 0b1101011, true, 0, 0b0110110, [false; 4]),
+        eor_test_2: 
+            (0b101010, 0b1010100, true, 1, 0, [false, true, false, false]),
+        eor_test_3: 
+            (i32::MIN, 0, true, 0, i32::MIN, [true, false, false, false]),
+        eor_test_4: 
+            (0, 4, true, 3, 0, [false, true, true, false]),
+        eor_test_5: 
+            (0, 1, false, 1, 0, [false; 4])
+    }
+
+    data_processing_tests! {
+        function: sub,
+        sub_test_1: 
+            (5, 7, true, 0, -2, [true, false, false, false]),
+        sub_test_2: 
+            (3, 3, true, 0, 0, [false, true, true, false]),
+        sub_test_3: 
+            (i32::MIN, 1, true, 0, i32::MAX, [false, false, true, true]),
+        sub_test_4: 
+            (10, 2, true, 1, 9, [false, false, true, false]),
+        sub_test_5: 
+            (3, 3, false, 0, 0, [false; 4])
+    }
+
+    data_processing_tests! {
+        function: rsb,
+        rsb_test_1: 
+            (7, 5, true, 0, -2, [true, false, false, false]),
+        rsb_test_2: 
+            (3, 3, true, 0, 0, [false, true, true, false]),
+        rsb_test_3: 
+            (1, i32::MIN, true, 0, i32::MAX, [false, false, true, true]),
+        rsb_test_4: 
+            (6, 16, true, 1, 2, [false, false, true, false]),
+        rsb_test_5: 
+            (3, 3, false, 0, 0, [false; 4])
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    data_processing_tests! {
         function: add,
         add_test_1: 
             (12, 7, true, 0, 19, [false; 4]),
         add_test_2: 
             (1, -1, true, 0, 0, [false, true, true, false]),
         add_test_3: 
-            (i32::MAX, 1, true, 0, i32::MIN, [true, false, false, true]),
+            (i32::MAX, 2, true, 1, i32::MIN, [true, false, false, true]),
         add_test_4: 
-            (-3, -17, false, 0, -20, [false; 4]),
+            (i32::MIN, -1, true, 0, i32::MAX, [false, false, true, true]),
         add_test_5: 
-            (i32::MIN, -1, true, 0, i32::MAX, [false, false, true, true])
+            (1, -1, false, 0, 0, [false; 4])
     }
 }
