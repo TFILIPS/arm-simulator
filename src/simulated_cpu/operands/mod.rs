@@ -1,18 +1,42 @@
-use std::{ops::Range, iter::StepBy};
+use std::{ops::Range, iter::StepBy, fmt::Display};
 
 use super::{names::{RegNames, FlagNames}, SimulatedCPU};
 use barrel_shifter::ShiftType;
 
 pub mod barrel_shifter;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum ShifterOperand {
     ImmediateShift { shift_amount: u8, shift: ShiftType, rm: RegNames },
     RegisterShift { rs: RegNames, shift: ShiftType, rm: RegNames },
     Immediate { rotate: u8, immediate: u8 }   
 }
+impl Display for ShifterOperand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ShifterOperand::ImmediateShift { shift_amount, shift, rm } => {
+                if let ShiftType::LSL = shift {
+                    if *shift_amount == 0 {
+                        return write!(f, "{:?}", rm);
+                    }
+                }
+                write!(f, "{:?}, {:?} #{shift_amount}", rm, shift)
+            },
+            ShifterOperand::RegisterShift { rs, shift, rm } => {
+                write!(f, "{rm}, {shift} {rs}")
+            },
+            ShifterOperand::Immediate { rotate, immediate } => {
+                let value: i32 = ShiftType::ROR.compute(
+                    *immediate as i32, 
+                    rotate * 2, false
+                ).0;
+                write!(f, "#{value}")
+            }
+        }
+    }
+}
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum AddressingMode {
     Immediate { p: bool, u: bool, w: bool, offset: u16 },
     // this is basically the same as ScaledRegister with 0 for shift parameters
@@ -21,7 +45,7 @@ pub enum AddressingMode {
         shift_imm: u8, shift: ShiftType, rm: RegNames }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct AddressingModeMultiple { 
     pub(super) p: bool, pub(super) u: bool, pub(super) w: bool, 
     pub(super) rn: RegNames, pub(super) register_list: u16

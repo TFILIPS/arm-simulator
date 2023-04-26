@@ -265,7 +265,7 @@ impl SimulatedCPU {
 
         // possibility to create array 
         match op {
-            0b000 => self.mul(s, rd_rdhi, rs, rm),
+            0b000 => self.mul(s, rd_rdhi, rn_rdlo, rs, rm),
             0b001 => self.mla(s, rd_rdhi, rn_rdlo, rs, rm),
             0b100 => self.umull(s, rd_rdhi, rn_rdlo, rs, rm),
             0b101 => self.umlal(s, rd_rdhi, rn_rdlo, rs, rm),

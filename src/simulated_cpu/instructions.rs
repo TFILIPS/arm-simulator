@@ -308,7 +308,8 @@ impl SimulatedCPU {
 
     // Multiply instructions
     pub(super) fn mul(
-        &mut self, s: bool, rd: RegNames, rs: RegNames, rm: RegNames 
+        &mut self, s: bool, rd: RegNames, _: RegNames,
+        rs: RegNames, rm: RegNames 
     ) {
         if DEBUG_PRINT { println!("mul"); }
 

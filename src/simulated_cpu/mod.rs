@@ -1,10 +1,12 @@
 use names::{RegNames, FlagNames};
+use new_decoder::InstructionDecoder;
 use crate::utils::{Endian, slice_to_u32};
 
 pub mod names;
-mod instruction_decoder;
+//mod instruction_decoder;
 mod instructions;
 mod operands;
+mod new_decoder;
 
 pub const MEMORY_SIZE: usize = 2usize.pow(26);
 
@@ -33,7 +35,13 @@ impl SimulatedCPU {
         let bytes: &[u8] = &self.memory[address..address+4];
         let instruction: u32 = slice_to_u32(&bytes, &self.encoding);
 
-        self.execute_instruction(instruction);
+        //self.execute_instruction(instruction);
+        if let Some(action) = InstructionDecoder::Action.decode(instruction) {
+            action(self);
+        }
+        else {
+            panic!("Unsupported Instruction!");
+        }
 
         if pc_value != self.registers[RegNames::PC] {
             self.registers[RegNames::PC] &= 0xFFFFFFFC_u32 as i32;
@@ -42,6 +50,21 @@ impl SimulatedCPU {
             self.registers[RegNames::PC] = 
                 self.registers[RegNames::PC].wrapping_add(4);
         }
+    }
+
+    pub fn disassemble_memory(&self, start: u32, length: u32) -> String {
+        let mut decoder: InstructionDecoder = InstructionDecoder::Disassembly { 
+            buffer: Vec::new()
+        };
+
+        for i in (start..start+length).step_by(4) {
+            let address: usize = i as usize;
+            let bytes: &[u8] = &self.memory[address..address+4];
+            let instruction: u32 = slice_to_u32(&bytes, &self.encoding);
+            decoder.decode(instruction);
+        }
+
+        decoder.get_string().unwrap()
     }
 
     pub fn _get_register(&self, register: RegNames) -> i32 {

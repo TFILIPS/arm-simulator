@@ -1,7 +1,7 @@
-use std::mem::transmute;
+use std::{mem::transmute, fmt::Display};
 
 #[repr(u32)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[allow(dead_code)]
 pub enum ShiftType { 
     LSL, LSR, ASR, ROR, RRX //RRX is special case of ROR
@@ -14,6 +14,12 @@ impl From<u32> for ShiftType {
             panic!("Convertion to ShiftType failed! value >= {NUM_SHIFTS}");
         }
         unsafe { transmute(value) }
+    }
+}
+
+impl Display for ShiftType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
     }
 }
 
