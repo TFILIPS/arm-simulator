@@ -171,7 +171,7 @@ impl SimulatedCPU {
             self.flags[FlagNames::N] = result < 0;
             self.flags[FlagNames::Z] = result == 0;
             self.flags[FlagNames::C] = 
-                (result as u32) <= (a as u32) && (b != 0 || c != 0);
+                (result as u32) <= (b as u32) && (a != 0 || c != 0);
             self.flags[FlagNames::V] = o1 || o2;
         }
     }
@@ -739,25 +739,29 @@ impl SimulatedCPU {
 mod tests {
     use crate::simulated_cpu::{
         SimulatedCPU, 
-        RegNames, 
+        RegNames, FlagNames, 
         operands::{ShifterOperand, barrel_shifter::ShiftType}
     };
+    use crate::utils::{T, F};
 
     macro_rules! data_processing_tests {
         (function: $function:ident, $($test_name:ident: $test_values:expr),*) 
         => {$(
             #[test]
             fn $test_name() {
-                let (a, b, s, shift, exp_res, exp_flags) = $test_values;
+                let (a, b, s, shift, c_in, exp_res, exp_flags) = $test_values;
 
                 let mut cpu: SimulatedCPU = SimulatedCPU::new();
                 cpu.set_register(RegNames::R1, a);
                 cpu.set_register(RegNames::R2, b);
+                cpu.flags[FlagNames::C] = c_in;
+
                 let so = ShifterOperand::ImmediateShift{
                     rm: RegNames::R2,
                     shift: ShiftType::LSR,
                     shift_amount: shift
                 };
+
                 cpu.$function(s, RegNames::R1, RegNames::R0, so);
                 assert_eq!(exp_res, cpu.get_register_intern(RegNames::R0));
                 assert_eq!(exp_flags, cpu.flags);
@@ -768,84 +772,112 @@ mod tests {
     data_processing_tests! {
         function: and,
         and_test_1: 
-            (0b1011101, 0b1101011, true, 0, 0b1001001, [false; 4]),
+            (0b1011101, 0b1101011, T, 0, T, 0b1001001, [F, F, T, F]),
         and_test_2: 
-            (0b101010, 0b101010, true, 1, 0, [false, true, false, false]),
+            (0b101010, 0b101010, T, 1, F, 0, [F, T, F, F]),
         and_test_3: 
-            (i32::MIN, -1, true, 0, i32::MIN, [true, false, false, false]),
+            (i32::MIN, -1, T, 0, F, i32::MIN, [T, F, F, F]),
         and_test_4: 
-            (-1, 4, true, 3, 0, [false, true, true, false]),
+            (-1, 4, T, 3, F, 0, [F, T, T, F]),
         and_test_5: 
-            (1, 1, false, 1, 0, [false; 4])
+            (1, 1, F, 1, F, 0, [F; 4])
     }
 
     data_processing_tests! {
         function: eor,
         eor_test_1: 
-            (0b1011101, 0b1101011, true, 0, 0b0110110, [false; 4]),
+            (0b1011101, 0b1101011, T, 0, T, 0b0110110, [F, F, T, F]),
         eor_test_2: 
-            (0b101010, 0b1010100, true, 1, 0, [false, true, false, false]),
+            (0b101010, 0b1010100, T, 1, F, 0, [F, T, F, F]),
         eor_test_3: 
-            (i32::MIN, 0, true, 0, i32::MIN, [true, false, false, false]),
+            (i32::MIN, 0, T, 0, F, i32::MIN, [T, F, F, F]),
         eor_test_4: 
-            (0, 4, true, 3, 0, [false, true, true, false]),
+            (0, 4, T, 3, F, 0, [F, T, T, F]),
         eor_test_5: 
-            (0, 1, false, 1, 0, [false; 4])
+            (0, 1, F, 1, F, 0, [F; 4])
     }
 
     data_processing_tests! {
         function: sub,
         sub_test_1: 
-            (5, 7, true, 0, -2, [true, false, false, false]),
+            (5, 7, T, 0, T, -2, [T, F, F, F]),
         sub_test_2: 
-            (3, 3, true, 0, 0, [false, true, true, false]),
+            (3, 3, T, 0, F, 0, [F, T, T, F]),
         sub_test_3: 
-            (i32::MIN, 1, true, 0, i32::MAX, [false, false, true, true]),
+            (i32::MIN, 1, T, 0, F, i32::MAX, [F, F, T, T]),
         sub_test_4: 
-            (10, 2, true, 1, 9, [false, false, true, false]),
+            (10, 2, T, 1, F, 9, [F, F, T, F]),
         sub_test_5: 
-            (3, 3, false, 0, 0, [false; 4])
+            (3, 3, F, 0, F, 0, [F; 4])
     }
 
     data_processing_tests! {
         function: rsb,
         rsb_test_1: 
-            (7, 5, true, 0, -2, [true, false, false, false]),
+            (7, 5, T, 0, T, -2, [T, F, F, F]),
         rsb_test_2: 
-            (3, 3, true, 0, 0, [false, true, true, false]),
+            (3, 3, T, 0, F, 0, [F, T, T, F]),
         rsb_test_3: 
-            (1, i32::MIN, true, 0, i32::MAX, [false, false, true, true]),
+            (1, i32::MIN, T, 0, F, i32::MAX, [F, F, T, T]),
         rsb_test_4: 
-            (6, 16, true, 1, 2, [false, false, true, false]),
+            (6, 16, T, 1, F, 2, [F, F, T, F]),
         rsb_test_5: 
-            (3, 3, false, 0, 0, [false; 4])
+            (3, 3, F, 0, F, 0, [F; 4])
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     data_processing_tests! {
         function: add,
         add_test_1: 
-            (12, 7, true, 0, 19, [false; 4]),
+            (12, 7, T, 0, T, 19, [F; 4]),
         add_test_2: 
-            (1, -1, true, 0, 0, [false, true, true, false]),
+            (1, -1, T, 0, F, 0, [F, T, T, F]),
         add_test_3: 
-            (i32::MAX, 2, true, 1, i32::MIN, [true, false, false, true]),
+            (i32::MAX, 2, T, 1, F, i32::MIN, [T, F, F, T]),
         add_test_4: 
-            (i32::MIN, -1, true, 0, i32::MAX, [false, false, true, true]),
+            (i32::MIN, -1, T, 0, F, i32::MAX, [F, F, T, T]),
         add_test_5: 
-            (1, -1, false, 0, 0, [false; 4])
+            (1, -1, F, 0, F, 0, [F; 4])
+    }
+
+    data_processing_tests! {
+        function: adc,
+        adc_test_1: 
+            (12, 7, T, 0, F, 19, [F; 4]),
+        adc_test_2: 
+            (1, -2, T, 0, T, 0, [F, T, T, F]),
+        adc_test_3: 
+            (i32::MAX, 2, T, 1, T, i32::MIN + 1, [T, F, F, T]),
+        adc_test_4: 
+            (i32::MIN, -1, T, 0, F, i32::MAX, [F, F, T, T]),
+        adc_test_5: 
+            (1, -2, F, 0, T, 0, [F, F, T, F])
+    }
+
+    data_processing_tests! {
+        function: sbc,
+        sbc_test_1: 
+            (5, 7, T, 0, T, -2, [T, F, F, F]),
+        sbc_test_2:
+            (3, 2, T, 0, F, 0, [F, T, T, F]),
+        sbc_test_3: 
+            (i32::MIN + 1, 1, T, 0, F, i32::MAX, [F, F, T, T]),
+        sbc_test_4: 
+            (10, 1, T, 1, T, 10, [F; 4]),
+        sbc_test_5: 
+            (3, 2, F, 0, F, 0, [F; 4])
+    }
+
+    data_processing_tests! {
+        function: rsc,
+        rsc_test_1: 
+            (7, 5, T, 0, T, -2, [T, F, F, F]),
+        rsc_test_2:
+            (2, 3, T, 0, F, 0, [F, T, T, F]),
+        rsc_test_3: 
+            (1, i32::MIN + 1, T, 0, F, i32::MAX, [F, F, T, T]),
+        rsc_test_4: 
+            (1, 10, T, 1, T, 4, [F, F, T, F]),
+        rsc_test_5: 
+            (2, 3, F, 0, F, 0, [F; 4])
     }
 }
