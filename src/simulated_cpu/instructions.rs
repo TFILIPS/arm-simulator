@@ -199,8 +199,8 @@ impl Instruction<ARMv5CPU, i32> for ARMv5Instruction {
                 match op {
                     ARMv5BranchOperation::B => ARMv5CPU::b(cpu, false, si),
                     ARMv5BranchOperation::BL => ARMv5CPU::b(cpu, true, si),
-                    ARMv5BranchOperation::BX => ARMv5CPU::bx(cpu, rm),
-                    ARMv5BranchOperation::BLX => ARMv5CPU::blx(cpu)
+                    ARMv5BranchOperation::BX => ARMv5CPU::bx(cpu, false, rm),
+                    ARMv5BranchOperation::BLX => ARMv5CPU::bx(cpu, true, rm)
                 }
             },
             ARMv5InstructionType::LoadStore { op, rn, rd, am } => {
@@ -713,19 +713,17 @@ impl ARMv5CPU {
         self.set_register(RegNames::PC, new_prog_addr);
     }
 
-    fn blx(&mut self) {
+    fn bx(&mut self, l: bool, rm: RegNames) {
         // This behaviour is incorrect! After switching to 
         // Thumb state on a non T CPU the next executed instruction
         // causes an UndefinedInstructionExeption. Then the cpu
         // switches back to ARM.
-        panic!("Thumb instruction set not supported!");
-    }
+        if l {
+            let prog_addr: i32 = self.get_register_intern(RegNames::PC);
+            let link_addr: i32 = prog_addr.wrapping_sub(4);
+            self.set_register(RegNames::LR, link_addr);
+        }
 
-    fn bx(&mut self, rm: RegNames) {
-        // This behaviour is incorrect! After switching to 
-        // Thumb state on a non T CPU the next executed instruction
-        // causes an UndefinedInstructionExeption. Then the cpu
-        // switches back to ARM.
         let target = self.get_register_intern(rm);
         self.set_register(RegNames::PC, target);
     }
@@ -911,8 +909,13 @@ impl ARMv5CPU {
     }
 
     fn bkpt(&mut self) {
-        // stop execution in webinterface
-        // meanwhile do nothing
+        for i in 0..16 {
+            let reg: RegNames = i.into();
+            println!("{reg}: {:08x}", self.get_register_intern(reg));
+        }
+        println!("N: {}, Z: {}, C: {}, V: {}",
+            self.get_flag(FlagNames::N), self.get_flag(FlagNames::Z),
+            self.get_flag(FlagNames::C), self.get_flag(FlagNames::V));
     }
 
 
