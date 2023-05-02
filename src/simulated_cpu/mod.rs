@@ -1,8 +1,9 @@
-use names::{RegNames, FlagNames};
-use instruction_decoder::InstructionDecoder;
-use crate::utils::{Endian, slice_to_u32};
+use std::io::Write;
 
-use self::{instruction_decoder::ARMv5Decoder, instructions::Instruction};
+use names::{RegNames, FlagNames};
+use instruction_decoder::{InstructionDecoder, ARMv5Decoder};
+use instructions::Instruction;
+use crate::utils::{Endian, slice_to_u32};
 
 pub mod names;
 
@@ -50,8 +51,17 @@ impl SimulatedCPU<i32> for ARMv5CPU {
         }
     }
 
-    fn disassemble_memory(&self, _start: u32, _length: u32) -> String {
-        todo!()
+    fn disassemble_memory(&self, start: u32, length: u32) -> String {
+        let mut buffer: Vec<u8> = Vec::new();
+        for address in (start..start+length).step_by(4) {
+            let address: usize = address as usize;
+            let bytes: &[u8] = &self.memory[address..address+4];
+            let bits: u32 = slice_to_u32(&bytes, &self.encoding);
+            let instruction: Box<dyn Instruction<ARMv5CPU, i32>> = 
+                Box::new(ARMv5Decoder::decode(bits));
+            writeln!(buffer, "{address:08X}  {instruction}").unwrap();
+        }
+        String::from_utf8_lossy(&buffer).to_string()
     }
 
     fn get_register(&self, register: RegNames) -> i32 {

@@ -44,16 +44,21 @@ pub enum AddressingMode {
     ScaledRegister { p: bool, u: bool, w: bool, 
         shift_imm: u8, shift: ShiftType, rm: RegNames }
 }
+impl Display for AddressingMode {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct AddressingModeMultiple { 
-    pub(super) p: bool, pub(super) u: bool, pub(super) w: bool, 
-    pub(super) rn: RegNames, pub(super) register_list: u16
+    pub p: bool, pub(super) u: bool, pub(super) w: bool, 
+    pub rn: RegNames, pub(super) register_list: u16
 }
 
 impl ARMv5CPU {
     // returns shifted value + possibly new carry flag
-    pub(super) fn perform_shift(&self, so: ShifterOperand) -> (i32, bool) {
+    pub fn perform_shift(&self, so: ShifterOperand) -> (i32, bool) {
         let carry = self.flags[FlagNames::C];
         match so {
             ShifterOperand::ImmediateShift { shift_amount, shift, rm } => {
@@ -76,7 +81,7 @@ impl ARMv5CPU {
         }
     }
 
-    pub(super) fn compute_modify_address(
+    pub fn compute_modify_address(
         &mut self, rn: RegNames, am: AddressingMode
     ) -> usize {
         let (p, u, w, offset): (bool, bool, bool, u32) = match am {

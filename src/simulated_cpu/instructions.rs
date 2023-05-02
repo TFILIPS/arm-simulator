@@ -13,7 +13,7 @@ pub trait Instruction<C: SimulatedCPU<S> , S>: Display {
 }
 
 #[repr(u32)]
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[allow(dead_code)]
 pub enum Condition { 
     EQ, NE, HS, LO, MI, PL, VS, VC, HI, LS, GE, LT, GT, LE, AL, Unconditional
@@ -257,8 +257,66 @@ impl Instruction<ARMv5CPU, i32> for ARMv5Instruction {
     }
 }
 impl Display for ARMv5Instruction {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let cond: Condition = self.condition;
+        match self.instruction_type {
+            ARMv5InstructionType::DataProcessing { op, s, rn, rd, so } => {
+                let s: &str = if s {"S"} else {""};
+                match op {
+                    ARMv5DataProcessingOperation::TST |
+                    ARMv5DataProcessingOperation::TEQ |
+                    ARMv5DataProcessingOperation::CMP |
+                    ARMv5DataProcessingOperation::CMN |
+                    ARMv5DataProcessingOperation::MOV |
+                    ARMv5DataProcessingOperation::MVN => write!(
+                        f, "{:?}{cond}{s} {rd}, {so}", op
+                    ),
+                    _ => write!(
+                        f, "{:?}{cond}{s} {rd}, {rn}, {so}", op
+                    )
+                }
+            },
+            ARMv5InstructionType::Multiply { op, s, rn_lo, rd_hi, rs, rm } => {
+                let s: &str = if s {"S"} else {""};
+                match op {
+                    ARMv5MultiplyOperation::MUL => write!(
+                        f, "{:?}{cond}{s} {rd_hi}, {rm}, {rs}", op
+                    ),
+                    ARMv5MultiplyOperation::MLA => write!(
+                        f, "{:?}{cond}{s} {rd_hi}, {rm}, {rs}, {rn_lo}", op
+                    ),
+                    _ => write!(
+                        f, "{:?}{cond}{s} {rd_hi}, {rn_lo}, {rm}, {rs}", op
+                    )
+                }
+            },
+            ARMv5InstructionType::Miscellaneous { op, rd, rm } => {
+                write!(f, "{:?}{cond} {rd}, {rm}", op)
+            },
+            ARMv5InstructionType::Branch { op, si, rm } => {
+                match op {
+                    ARMv5BranchOperation::B | ARMv5BranchOperation::BL => {
+                        //improve with lable or correct address
+                        write!(f, "{:?}{cond} {:x}", op, si)
+                    },
+                    ARMv5BranchOperation::BX | ARMv5BranchOperation::BLX => {
+                        write!(f, "{op:?}{cond} {rm}")
+                    }
+                }
+            },
+            ARMv5InstructionType::LoadStore { op, rn: _, rd, .. } => {
+                write!(f, "{:?}{cond} {rd} comming soon!", op)
+            },
+            ARMv5InstructionType::LoadStoreMultiple { op, .. } => {
+                write!(f, "{:?}{cond} comming soon!", op)
+            },
+            ARMv5InstructionType::Synchronization { op, rn, rd, rm } => {
+                write!(f, "{:?}{cond} {rd} {rm} {rn}", op)
+            },
+            ARMv5InstructionType::Generic { op } => {
+                write!(f, "{:?}", op)
+            }
+        }
     }
 }
 
