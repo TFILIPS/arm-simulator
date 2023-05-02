@@ -41,6 +41,7 @@ impl ELFFile {
     pub fn load_memory(&self, memory: &mut Vec<u8>) -> Result<(), String> {
         let headers: Vec<ProgramHeader> = self.read_program_headers()?;
         for header in headers {
+            if header.program_type != 1 { continue; }
             let file_start: usize = header.offset as usize;
             let file_end: usize = file_start + header.file_size as usize;
             let mem_start: usize = header.virtual_address as usize;
@@ -57,6 +58,11 @@ impl ELFFile {
 
             memory[mem_start..mem_end]
                 .copy_from_slice(&self.raw_data[file_start..file_end]);
+
+            if header.memory_size > header.file_size {
+                let exp_end: usize = mem_start + header.memory_size as usize;
+                for byte in memory[mem_end..exp_end].iter_mut() { *byte = 0 };
+            }
         }
         Ok(())
     }
