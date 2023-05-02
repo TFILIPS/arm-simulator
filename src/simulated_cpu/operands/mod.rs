@@ -1,6 +1,6 @@
 use std::{ops::Range, iter::StepBy, fmt::Display};
 
-use super::{names::{RegNames, FlagNames}, SimulatedCPU};
+use super::{SimulatedCPU, ARMv5CPU, names::{RegNames, FlagNames}};
 use barrel_shifter::ShiftType;
 
 pub mod barrel_shifter;
@@ -51,7 +51,7 @@ pub struct AddressingModeMultiple {
     pub(super) rn: RegNames, pub(super) register_list: u16
 }
 
-impl SimulatedCPU {
+impl ARMv5CPU {
     // returns shifted value + possibly new carry flag
     pub(super) fn perform_shift(&self, so: ShifterOperand) -> (i32, bool) {
         let carry = self.flags[FlagNames::C];
