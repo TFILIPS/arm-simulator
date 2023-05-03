@@ -57,8 +57,10 @@ impl SimulatedCPU<i32> for ARMv5CPU {
             let address: usize = address as usize;
             let bytes: &[u8] = &self.memory[address..address+4];
             let bits: u32 = slice_to_u32(&bytes, &self.encoding);
+
             let instruction: Box<dyn Instruction<ARMv5CPU, i32>> = 
                 Box::new(ARMv5Decoder::decode(bits));
+                
             writeln!(buffer, "{address:08X}  {instruction}").unwrap();
         }
         String::from_utf8_lossy(&buffer).to_string()

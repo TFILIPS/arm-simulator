@@ -23,7 +23,7 @@ fn main() {
     cpu.set_encoding(elf_file.get_encoding());
 
     elf_file.load_memory(cpu.get_memory()).unwrap_or_else(print_and_exit);
-    println!("{:}", cpu.disassemble_memory(elf_file.get_entry_point(), 4*100));
+    //println!("{:}", cpu.disassemble_memory(elf_file.get_entry_point(), 4*100));
 
     loop { cpu.step(); }
 }

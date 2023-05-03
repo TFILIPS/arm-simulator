@@ -1,7 +1,9 @@
 use crate::utils::{BitAccess, T, F};
 use super::{
     SimulatedCPU, ARMv5CPU, names::RegNames, instructions::*,
-    operands::{ShifterOperand, AddressingMode, AddressingModeMultiple}
+    operands::{
+        ShifterOperand, AddressingMode, OffsetType, AddressingModeMultiple
+    }
 };
 
 pub trait InstructionDecoder<I: Instruction<C, S>, C: SimulatedCPU<S>, S> {
@@ -206,57 +208,53 @@ impl ARMv5Decoder {
         else if op2 == 0b01 { ARMv5LoadStoreOperation::STRH }
         else { panic!("Undefined in ARMv5!") };
 
-        let p: bool = inst_bits.get_bit(24);
-        let u: bool = inst_bits.get_bit(23);
-        let w: bool = inst_bits.get_bit(21);
-
-        let am: AddressingMode = if inst_bits.get_bit(24) {
-            AddressingMode::Register { p, u, w, 
-                rm: inst_bits.cut_bits(0..=3).into()
-            }
+        let offset_type: OffsetType = if inst_bits.get_bit(24) {
+            OffsetType::Register { rm: inst_bits.cut_bits(0..=3).into() }
         }
         else {
-            AddressingMode::Immediate { p, u, w, 
+            OffsetType::Immediate { 
                 offset: (inst_bits.cut_bits(8..=11) << 4 
                     + inst_bits.cut_bits(0..=3)) as u16
             }
         };
 
         let condition: Condition = Condition::from_instruction(inst_bits);
+
+        let p: bool = inst_bits.get_bit(24);
+        let u: bool = inst_bits.get_bit(23);
+        let w: bool = inst_bits.get_bit(21);
+
         let rn: RegNames = inst_bits.cut_bits(16..=19).into();
         let rd: RegNames = inst_bits.cut_bits(12..=15).into();
 
         ARMv5Instruction {
             condition, instruction_type: ARMv5InstructionType::LoadStore { 
-                op, rn, rd, am 
+                op, rd, am: AddressingMode { p, u, w, rn, offset_type }
             }
         }
     }
 
     fn load_store(inst_bits: u32) -> ARMv5Instruction {
-        let p: bool = inst_bits.get_bit(24);
-        let u: bool = inst_bits.get_bit(23);
-        let w: bool = inst_bits.get_bit(21);
-
-        let am: AddressingMode = if inst_bits.get_bit(25) {
+        let offset_type: OffsetType = if inst_bits.get_bit(25) {
             if inst_bits.get_bit(4) {
                 //media instructions
                 panic!("Undefined in ARMv5!");
             }
-            AddressingMode::ScaledRegister { 
-                p, u, w, 
+            OffsetType::ScaledRegister { 
                 shift_imm: inst_bits.cut_bits(7..=11) as u8, 
                 shift: inst_bits.cut_bits(5..=6).into(), 
                 rm: inst_bits.cut_bits(0..=3).into() 
             }
         }
         else {
-            AddressingMode::Immediate { 
-                p, u, w, 
+            OffsetType::Immediate { 
                 offset: inst_bits.cut_bits(0..=11) as u16
             }
         };
 
+        let p: bool = inst_bits.get_bit(24);
+        let u: bool = inst_bits.get_bit(23);
+        let w: bool = inst_bits.get_bit(21);
         let l: bool = inst_bits.get_bit(20);
         let b: bool = inst_bits.get_bit(22);
 
@@ -277,7 +275,7 @@ impl ARMv5Decoder {
 
         ARMv5Instruction {
             condition, instruction_type: ARMv5InstructionType::LoadStore { 
-                op, rn, rd, am 
+                op, rd, am: AddressingMode { p, u, w, rn, offset_type }
             }
         }
     }

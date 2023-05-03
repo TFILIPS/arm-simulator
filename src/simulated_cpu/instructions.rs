@@ -134,8 +134,7 @@ pub enum ARMv5InstructionType {
         op: ARMv5BranchOperation, si: i32, rm: RegNames
     },
     LoadStore {
-        op: ARMv5LoadStoreOperation, rn: RegNames, 
-        rd: RegNames, am: AddressingMode
+        op: ARMv5LoadStoreOperation, rd: RegNames, am: AddressingMode
     },
     LoadStoreMultiple {
          op: ARMv5LoadStoreMultipleOperation, amm: AddressingModeMultiple
@@ -203,7 +202,7 @@ impl Instruction<ARMv5CPU, i32> for ARMv5Instruction {
                     ARMv5BranchOperation::BLX => ARMv5CPU::bx(cpu, true, rm)
                 }
             },
-            ARMv5InstructionType::LoadStore { op, rn, rd, am } => {
+            ARMv5InstructionType::LoadStore { op, rd, am } => {
                 let function = match op {
                     ARMv5LoadStoreOperation::LDR => ARMv5CPU::ldr,
                     ARMv5LoadStoreOperation::LDRB => ARMv5CPU::ldrb,
@@ -218,7 +217,7 @@ impl Instruction<ARMv5CPU, i32> for ARMv5Instruction {
                     ARMv5LoadStoreOperation::STRH => ARMv5CPU::strh,
                     ARMv5LoadStoreOperation::STRT => ARMv5CPU::strt
                 };
-                function(cpu, rn, rd, am);
+                function(cpu, rd, am);
             },
             ARMv5InstructionType::LoadStoreMultiple { op, amm } => {
                 let function = match op {
@@ -304,7 +303,7 @@ impl Display for ARMv5Instruction {
                     }
                 }
             },
-            ARMv5InstructionType::LoadStore { op, rn: _, rd, .. } => {
+            ARMv5InstructionType::LoadStore { op, rd, .. } => {
                 write!(f, "{:?}{cond} {rd} comming soon!", op)
             },
             ARMv5InstructionType::LoadStoreMultiple { op, .. } => {
@@ -730,10 +729,8 @@ impl ARMv5CPU {
 
 
     // Load and store instructions
-    fn ldr(
-        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
-    ) {
-        let mut address: usize = self.compute_modify_address(rn, am);
+    fn ldr(&mut self, rd: RegNames, am: AddressingMode) {
+        let mut address: usize = self.compute_modify_address(am);
         let rot_bits: u32 = (address as u32).cut_bits(0..=1);
         address &= 0xFFFFFFFC;
 
@@ -749,52 +746,42 @@ impl ARMv5CPU {
         self.set_register(rd, value as i32);
     }
 
-    fn ldrb(
-        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
-    ) {
-        let address: usize = self.compute_modify_address(rn, am);
+    fn ldrb(&mut self, rd: RegNames, am: AddressingMode) {
+        let address: usize = self.compute_modify_address(am);
         let value: u32 = self.memory[address] as u32;
         self.set_register(rd, value as i32);
     }
 
-    fn ldrbt(
-        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
-    ) { self.ldrb(rn, rd, am); }
+    fn ldrbt(&mut self, rd: RegNames, am: AddressingMode) { 
+        self.ldrb(rd, am); 
+    }
 
-    fn ldrh(
-        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
-    ) {
-        let address: usize = self.compute_modify_address(rn, am);
+    fn ldrh(&mut self, rd: RegNames, am: AddressingMode) {
+        let address: usize = self.compute_modify_address(am);
         let bytes: &[u8] = &self.memory[address..address+2];
         let value: u32 = slice_to_u16(bytes, &self.encoding) as u32;
         self.set_register(rd, value as i32);
     }
 
-    fn ldrsb(
-        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
-    ) {
-        let address: usize = self.compute_modify_address(rn, am);
+    fn ldrsb(&mut self, rd: RegNames, am: AddressingMode) {
+        let address: usize = self.compute_modify_address(am);
         let value: i32 = self.memory[address] as i32;
         self.set_register(rd, value);
     }
 
-    fn ldrsh(
-        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
-    ) {
-        let address: usize = self.compute_modify_address(rn, am);
+    fn ldrsh(&mut self, rd: RegNames, am: AddressingMode) {
+        let address: usize = self.compute_modify_address(am);
         let bytes: &[u8] = &self.memory[address..address+2];
         let value: i32 = slice_to_u16(bytes, &self.encoding) as i32;
         self.set_register(rd, value);
     }
 
-    fn ldrt(
-        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
-    ) { self.ldr(rn, rd, am); }
+    fn ldrt(&mut self, rd: RegNames, am: AddressingMode) { 
+        self.ldr(rd, am); 
+    }
 
-    fn str(
-        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
-    ) {
-        let mut address: usize = self.compute_modify_address(rn, am);
+    fn str(&mut self, rd: RegNames, am: AddressingMode) {
+        let mut address: usize = self.compute_modify_address(am);
         address &= 0xFFFFFFFC;
 
         let value = self.get_register_intern(rd) as u32;
@@ -803,22 +790,18 @@ impl ARMv5CPU {
         self.memory.splice(address..address+4, bytes);
     }
 
-    fn strb(
-        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
-    ) {
-        let address: usize = self.compute_modify_address(rn, am);
+    fn strb(&mut self, rd: RegNames, am: AddressingMode) {
+        let address: usize = self.compute_modify_address(am);
         let value: u8 = self.get_register_intern(rd) as u8;
         self.memory[address] = value;
     }
 
-    fn strbt(
-        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
-    ) { self.strb(rn, rd, am); }
+    fn strbt(&mut self, rd: RegNames, am: AddressingMode) { 
+        self.strb(rd, am); 
+    }
 
-    fn strh(
-        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
-    ) {
-        let address: usize = self.compute_modify_address(rn, am);
+    fn strh(&mut self, rd: RegNames, am: AddressingMode) {
+        let address: usize = self.compute_modify_address(am);
 
         let value: u16 = self.get_register_intern(rd) as u16;
         let bytes: [u8; 2] = u16_to_array(value, &self.encoding);
@@ -826,9 +809,9 @@ impl ARMv5CPU {
         self.memory.splice(address..address+2, bytes);
     }
 
-    fn strt(
-        &mut self, rn: RegNames, rd: RegNames, am: AddressingMode
-    ) { self.str(rn, rd, am); }
+    fn strt(&mut self, rd: RegNames, am: AddressingMode) { 
+        self.str(rd, am); 
+    }
 
     fn ldm(&mut self, amm: AddressingModeMultiple) {
         let mut addresses: StepBy<Range<usize>> = 
