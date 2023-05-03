@@ -1,11 +1,13 @@
 use std::{ops::Range, iter::StepBy, fmt::Display};
 
+use crate::utils::BitAccess;
+
 use super::{SimulatedCPU, ARMv5CPU, names::{RegNames, FlagNames}};
 use barrel_shifter::ShiftType;
 
 pub mod barrel_shifter;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub enum ShifterOperand {
     ImmediateShift { shift_amount: u8, shift: ShiftType, rm: RegNames },
     RegisterShift { rs: RegNames, shift: ShiftType, rm: RegNames },
@@ -41,6 +43,30 @@ pub struct AddressingMode {
     pub p: bool, pub u: bool, pub w: bool, pub rn: RegNames,
     pub offset_type: OffsetType
 }
+impl Display for AddressingMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let offset_string: String = match self.offset_type {
+            OffsetType::Immediate { offset } => {
+                if offset != 0 {
+                    format!(", #{}{offset}", if self.u { "" } else { "-" })
+                }
+                else {String::new()}
+            },
+            OffsetType::Register { rm } => format!(", {rm}"),
+            OffsetType::ScaledRegister { shift_imm, shift, rm } => {
+                format!(", {rm}, {shift} #{shift_imm}")
+            }
+        };
+        let rn: RegNames = self.rn;
+        if self.p {
+            if self.w { write!(f,"[{rn}{offset_string}]!") }
+            else { write!(f,"[{rn}{offset_string}]")}
+        }
+        else { write!(f,"[{rn}]{offset_string}") }
+    }
+}
+
+
 
 #[derive(Clone, Copy)]
 pub enum OffsetType {
@@ -50,10 +76,27 @@ pub enum OffsetType {
     ScaledRegister { shift_imm: u8, shift: ShiftType, rm: RegNames }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct AddressingModeMultiple { 
     pub p: bool, pub(super) u: bool, pub(super) w: bool, 
     pub rn: RegNames, pub(super) register_list: u16
+}
+impl Display for AddressingModeMultiple {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut registers: Vec<String> = Vec::new();
+        for i in 0..16 {
+            if self.register_list.get_bit(i) {
+                registers.push(format!("{}", RegNames::from(i as u32)));
+            }
+        }
+        write!(f, "{0}{1} {2}{3}, {{{4}}}",
+            if self.u { "I" } else { "D" },
+            if self.p { "B" } else { "A" },
+            self.rn, 
+            if self.w { "!" } else { "" },
+            registers.join(", ")
+        )
+    }
 }
 
 impl ARMv5CPU {

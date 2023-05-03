@@ -296,24 +296,24 @@ impl Display for ARMv5Instruction {
                 match op {
                     ARMv5BranchOperation::B | ARMv5BranchOperation::BL => {
                         //improve with lable or correct address
-                        write!(f, "{:?}{cond} {:x}", op, si)
+                        write!(f, "{:?}{cond} 0x{:x}", op, si)
                     },
                     ARMv5BranchOperation::BX | ARMv5BranchOperation::BLX => {
                         write!(f, "{op:?}{cond} {rm}")
                     }
                 }
             },
-            ARMv5InstructionType::LoadStore { op, rd, .. } => {
-                write!(f, "{:?}{cond} {rd} comming soon!", op)
+            ARMv5InstructionType::LoadStore { op, rd, am } => {
+                write!(f, "{:?}{cond} {rd}, {am}", op)
             },
-            ARMv5InstructionType::LoadStoreMultiple { op, .. } => {
-                write!(f, "{:?}{cond} comming soon!", op)
+            ARMv5InstructionType::LoadStoreMultiple { op, amm } => {
+                write!(f, "{:?}{cond}{amm}", op)
             },
             ARMv5InstructionType::Synchronization { op, rn, rd, rm } => {
                 write!(f, "{:?}{cond} {rd} {rm} {rn}", op)
             },
             ARMv5InstructionType::Generic { op } => {
-                write!(f, "{:?}", op)
+                write!(f, "{:?} #0", op)
             }
         }
     }
