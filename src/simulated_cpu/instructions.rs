@@ -117,7 +117,6 @@ pub enum ARMv5GenericOperation {
 }
 
 //maybe add undefined
-#[derive(Clone, Copy)]
 pub enum ARMv5InstructionType {
     DataProcessing { 
         op: ARMv5DataProcessingOperation, s: bool, rn: RegNames, 

@@ -6,7 +6,6 @@ use super::{ELF_ID, HEADER_VERSION_KEY};
 pub enum ValueError { Version, Type, Machine, Class }
 
 #[repr(C)]
-#[derive(Debug)]
 pub struct ELFHeader {
     pub elf_id: [u8; 16],
     pub elf_type: u16,
@@ -89,8 +88,12 @@ impl ELFHeader {
     }
 }
 
+pub trait InternalHeader: Sized {
+    const SIZE: usize;
+    fn new(bytes: &[u8], encoding: &Endian) -> Self;
+}
+
 #[repr(C)]
-#[derive(Debug)]
 pub struct ProgramHeader {
     pub program_type: u32,
     pub offset: u32,
@@ -101,11 +104,13 @@ pub struct ProgramHeader {
     pub flags: u32,
     pub align: u32,
 }
+impl InternalHeader for ProgramHeader {
+    const SIZE: usize = size_of::<ProgramHeader>();
 
-impl ProgramHeader {
-    pub const SIZE: usize = size_of::<ProgramHeader>();
-
-    pub fn new(bytes: [u8; ProgramHeader::SIZE], encoding: &Endian) -> Self {
+    fn new(bytes: &[u8], encoding: &Endian) -> ProgramHeader {
+        if bytes.len() != Self::SIZE {
+            panic!("Failed to create ProgramHeader. Wrong slice length!");
+        }
         Self {
             program_type: slice_to_u32(&bytes[0..4], encoding),
             offset: slice_to_u32(&bytes[4..8], encoding),
@@ -115,6 +120,42 @@ impl ProgramHeader {
             memory_size: slice_to_u32(&bytes[20..24], encoding),
             flags: slice_to_u32(&bytes[24..28], encoding),
             align: slice_to_u32(&bytes[28..32], encoding),
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct SectionHeader {
+    pub section_name: u32,
+    pub section_type: u32,
+    pub flags: u32,
+    pub address: u32,
+    pub offset: u32,
+    pub size: u32,
+    pub link: u32,
+    pub info: u32,
+    pub address_align: u32,
+    pub entrie_size: u32
+}
+impl InternalHeader for SectionHeader {
+    const SIZE: usize = size_of::<SectionHeader>();
+
+    fn new(bytes: &[u8], encoding: &Endian) -> SectionHeader {
+        if bytes.len() != SectionHeader::SIZE {
+            panic!("Failed to create SectionHeader. Wrong slice length!");
+        }
+        Self {
+            section_name: slice_to_u32(&bytes[0..4], encoding),
+            section_type: slice_to_u32(&bytes[4..8], encoding),
+            flags: slice_to_u32(&bytes[8..12], encoding),
+            address: slice_to_u32(&bytes[12..16], encoding),
+            offset: slice_to_u32(&bytes[16..20], encoding),
+            size: slice_to_u32(&bytes[20..24], encoding),
+            link: slice_to_u32(&bytes[24..28], encoding),
+            info: slice_to_u32(&bytes[28..32], encoding),
+            address_align: slice_to_u32(&bytes[32..36], encoding),
+            entrie_size:slice_to_u32(&bytes[36..40], encoding)
         }
     }
 }

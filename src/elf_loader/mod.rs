@@ -1,6 +1,8 @@
 use std::fs;
 
-use headers::{ELFHeader, ProgramHeader, ValueError};
+use headers::{
+    ELFHeader, InternalHeader, ProgramHeader, SectionHeader, ValueError
+};
 use crate::utils::Endian;
 
 mod headers;
@@ -18,7 +20,7 @@ const ELF_TYPE_KEY: u16 = 0x2; // executeable
 pub struct ELFFile {
     elf_header: ELFHeader,
     raw_data: Vec<u8>,
-    encoding: Endian,
+    encoding: Endian
 }
 
 impl ELFFile {
@@ -67,6 +69,14 @@ impl ELFFile {
         Ok(())
     }
 
+    #[allow(dead_code)]
+    pub fn print_string_table(&self) {
+        for header in self.read_section_header().unwrap() {
+            println!("{header:#?}");
+        }
+        
+    }
+
     pub fn check_header_values(&self) -> Result<(), String> {
         match self.elf_header.check_values(
             ELF_VERSION_KEY, 
@@ -98,28 +108,43 @@ impl ELFFile {
         self.encoding
     }
 
-    fn read_program_headers(&self) -> Result<Vec<ProgramHeader>, String> {
-        const HEADER_SIZE: usize = ProgramHeader::SIZE;
+    fn read_internal_header<H: InternalHeader>(
+        &self, num_headers: u16, table_offset: u32
+    ) -> Result<Vec<H>, String>  {
 
-        let num_headers: usize = self.elf_header.num_program_headers as usize;
-        let mut headers: Vec<ProgramHeader> = Vec::with_capacity(num_headers);
+        let  header_size: usize = H::SIZE;
+        let num_headers: usize = num_headers as usize;
+        let mut headers: Vec<H> = Vec::with_capacity(num_headers);
 
-        let mut start: usize = self.elf_header.program_table_offset as usize;
-        let mut stop: usize = start + HEADER_SIZE;
+        let mut start: usize = table_offset as usize;
+        let mut stop: usize = start + header_size;
         for _ in 0..num_headers {
             if self.raw_data.len() < stop {
                 return Err(String::from(
-                    "Error while reading program headers! Check ELF file.",
+                    "Error while reading internal headers! Check ELF file.",
                 ));
             }
 
-            let header_bytes: [u8; HEADER_SIZE] =
-                self.raw_data[start..stop].try_into().unwrap();
-            headers.push(ProgramHeader::new(header_bytes, &self.encoding));
+            let header_bytes: &[u8] = &self.raw_data[start..stop];
+            headers.push(H::new(header_bytes, &self.encoding));
 
-            start += HEADER_SIZE;
-            stop += HEADER_SIZE;
+            start += header_size;
+            stop += header_size;
         }
         Ok(headers)
+    }
+
+    fn read_program_headers(&self) -> Result<Vec<ProgramHeader>, String> {
+        self.read_internal_header::<ProgramHeader>(
+            self.elf_header.num_program_headers, 
+            self.elf_header.program_table_offset
+        )
+    }
+
+    fn read_section_header(&self) -> Result<Vec<SectionHeader>, String> {
+        self.read_internal_header::<SectionHeader>(
+            self.elf_header.num_section_headers, 
+            self.elf_header.section_table_offset
+        )
     }
 }
