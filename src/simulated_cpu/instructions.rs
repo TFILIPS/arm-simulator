@@ -142,7 +142,8 @@ pub enum ARMv5InstructionType {
         op: ARMv5SynchronizationOperation, rn: RegNames, 
         rd:RegNames, rm: RegNames
     },
-    Generic { op: ARMv5GenericOperation }
+    Generic { op: ARMv5GenericOperation },
+    Undefined
 }
 
 //maybe provide constructor
@@ -251,6 +252,8 @@ impl Instruction<ARMv5CPU, i32> for ARMv5Instruction {
                 };
                 function(cpu);
             }
+            ARMv5InstructionType::Undefined => 
+                println!("Undefined Instruction!")
         }
     }
 }
@@ -314,6 +317,7 @@ impl Display for ARMv5Instruction {
             ARMv5InstructionType::Generic { op } => {
                 write!(f, "{:?} #0", op)
             }
+            ARMv5InstructionType::Undefined => write!(f, "?")
         }
     }
 }

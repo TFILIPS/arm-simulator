@@ -30,6 +30,11 @@ impl InstructionDecoder<ARMv5Instruction, ARMv5CPU, i32> for ARMv5Decoder {
     }
 }
 impl ARMv5Decoder {
+    const UNDEFINED_INSTRUCTION: ARMv5Instruction = ARMv5Instruction{
+        condition: Condition::AL,
+        instruction_type: ARMv5InstructionType::Undefined
+    };
+
     fn data_and_miscellaneos(inst_bits: u32) -> ARMv5Instruction {
         let op: bool = inst_bits.get_bit(25);
         let op1: u32 = inst_bits.cut_bits(20..=24);
@@ -90,7 +95,7 @@ impl ARMv5Decoder {
                 };
             }
         }
-        panic!("Undefined in ARMv5!")
+        ARMv5Decoder::UNDEFINED_INSTRUCTION
     }
 
     fn data(inst_bits: u32, so: ShifterOperand) -> ARMv5Instruction {
@@ -134,7 +139,7 @@ impl ARMv5Decoder {
             (0b111, 0b01) => ARMv5InstructionType::Generic {
                 op: ARMv5GenericOperation::BKPT
             },        
-            _ => panic!("Undefined in ARMv5!")
+            _ => return ARMv5Decoder::UNDEFINED_INSTRUCTION
         };
 
         let condition: Condition = Condition::from_instruction(inst_bits);
@@ -150,7 +155,7 @@ impl ARMv5Decoder {
             0b101 => ARMv5MultiplyOperation::UMLAL,
             0b110 => ARMv5MultiplyOperation::SMULL,
             0b111 => ARMv5MultiplyOperation::SMLAL,
-            _ => panic!("Undefined in ARMv5!")
+            _ => return ARMv5Decoder::UNDEFINED_INSTRUCTION
         };
 
         let condition: Condition = Condition::from_instruction(inst_bits);
@@ -170,7 +175,7 @@ impl ARMv5Decoder {
 
     fn synchronization(inst_bits: u32) -> ARMv5Instruction {
         if inst_bits.get_bit(23) || inst_bits.cut_bits(20..=21) != 0 {
-            panic!("Undefined in ARMv5!"); 
+            return ARMv5Decoder::UNDEFINED_INSTRUCTION;
         }
 
         //maybe combine swp and swpb to one function lets first look at str and ldr        
@@ -202,11 +207,11 @@ impl ARMv5Decoder {
                 0b01 => ARMv5LoadStoreOperation::LDRH,
                 0b10 => ARMv5LoadStoreOperation::LDRSB,
                 0b11 => ARMv5LoadStoreOperation::LDRSH,
-                _ =>  panic!("Undefined in ARMv5!")
+                _ => return ARMv5Decoder::UNDEFINED_INSTRUCTION
             }
         }
         else if op2 == 0b01 { ARMv5LoadStoreOperation::STRH }
-        else { panic!("Undefined in ARMv5!") };
+        else { return ARMv5Decoder::UNDEFINED_INSTRUCTION };
 
         let offset_type: OffsetType = if inst_bits.get_bit(24) {
             OffsetType::Register { rm: inst_bits.cut_bits(0..=3).into() }
@@ -238,7 +243,7 @@ impl ARMv5Decoder {
         let offset_type: OffsetType = if inst_bits.get_bit(25) {
             if inst_bits.get_bit(4) {
                 //media instructions
-                panic!("Undefined in ARMv5!");
+                return ARMv5Decoder::UNDEFINED_INSTRUCTION;
             }
             OffsetType::ScaledRegister { 
                 shift_imm: inst_bits.cut_bits(7..=11) as u8, 
@@ -322,7 +327,7 @@ impl ARMv5Decoder {
                 }
             }
         }
-        else { panic!("Undefined in ARMv5!") }
+        else { return ARMv5Decoder::UNDEFINED_INSTRUCTION;  }
     }
 }
 

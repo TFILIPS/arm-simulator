@@ -1,4 +1,4 @@
-use std::io::Write;
+use std::{io::Write, collections::HashMap};
 
 use names::{RegNames, FlagNames};
 use instruction_decoder::{InstructionDecoder, ARMv5Decoder};
@@ -15,7 +15,10 @@ pub const MEMORY_SIZE: usize = 2usize.pow(26);
 
 pub trait SimulatedCPU<S> {
     fn step(&mut self);
-    fn disassemble_memory(&self, start: u32, length: u32) -> String;
+    fn disassemble_memory(
+        &self, start: u32, end: u32, 
+        labels: Vec<(u32, String)>
+    ) -> String;
 
     fn get_register(&self, register: RegNames) -> S;
     fn set_register(&mut self, register: RegNames, value: S);
@@ -51,17 +54,25 @@ impl SimulatedCPU<i32> for ARMv5CPU {
         }
     }
 
-    fn disassemble_memory(&self, start: u32, length: u32) -> String {
+    fn disassemble_memory(
+        &self, start: u32, end: u32, labels: Vec<(u32, String)>
+    ) -> String {
         let mut buffer: Vec<u8> = Vec::new();
-        for address in (start..start+length).step_by(4) {
+        let label_map: HashMap<u32, String> = labels.into_iter().collect();
+
+        for address in (start..end).step_by(4) {
+            if let Some(label) = label_map.get(&address) {
+                writeln!(buffer, "-------- | {label}:").unwrap();
+            }
+
             let address: usize = address as usize;
             let bytes: &[u8] = &self.memory[address..address+4];
             let bits: u32 = slice_to_u32(&bytes, &self.encoding);
 
             let instruction: Box<dyn Instruction<ARMv5CPU, i32>> = 
                 Box::new(ARMv5Decoder::decode(bits));
-                
-            writeln!(buffer, "{address:08X}  {instruction}").unwrap();
+
+            writeln!(buffer, "{address:08X} |     {instruction}").unwrap();
         }
         String::from_utf8_lossy(&buffer).to_string()
     }
