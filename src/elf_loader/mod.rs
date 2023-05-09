@@ -1,6 +1,9 @@
 use std::fs;
 
-use headers::{ELFHeader, ProgramHeader, ValueError};
+use headers::{
+    ELFHeader, ELFTableEntry, ProgramHeader, 
+    SectionHeader, SymbolTableEntry, ValueError
+};
 use crate::utils::Endian;
 
 mod headers;
@@ -9,6 +12,12 @@ mod headers;
 const ELF_ID: [u8; 4] = [0x7f, 0x45, 0x4c, 0x46];
 const HEADER_VERSION_KEY: u8 = 0x1;
 const ELF_VERSION_KEY: u32 = 0x1;
+const SECTION_SYMTAB_KEY: u32 = 0x2;
+// 0x0: STT_NOTYPE, 0x1: STT_OBJECT, 0x2: STT_FUNC
+const LABEL_TYPES: [u8; 3] = [0x0, 0x1, 0x2];
+
+// Has to be UNIX - System V for OS specific operation in get_labels
+const OSABI_KEY: u8 = 0x0; // UNIX - System V
 
 // Modifiable values: For this project we want an 32-bit ARM executable
 const CLASS_KEY: u8 = 0x1; // 32-Bit
@@ -18,14 +27,14 @@ const ELF_TYPE_KEY: u16 = 0x2; // executeable
 pub struct ELFFile {
     elf_header: ELFHeader,
     raw_data: Vec<u8>,
-    encoding: Endian,
+    encoding: Endian
 }
 
 impl ELFFile {
     pub fn load(file_path: &str) -> Result<Self, String> {
         let raw_data: Vec<u8> = match fs::read(file_path) {
             Ok(file_content) => file_content,
-            Err(_) => return Err(String::from("Failed to read the ELF file!")),
+            Err(_) => return Err(String::from("Failed to read the ELF file!"))
         };
 
         if raw_data.len() < ELFHeader::SIZE {
@@ -41,6 +50,7 @@ impl ELFFile {
     pub fn load_memory(&self, memory: &mut Vec<u8>) -> Result<(), String> {
         let headers: Vec<ProgramHeader> = self.read_program_headers()?;
         for header in headers {
+            if header.program_type != 1 { continue; }
             let file_start: usize = header.offset as usize;
             let file_end: usize = file_start + header.file_size as usize;
             let mem_start: usize = header.virtual_address as usize;
@@ -57,16 +67,66 @@ impl ELFFile {
 
             memory[mem_start..mem_end]
                 .copy_from_slice(&self.raw_data[file_start..file_end]);
+
+            if header.memory_size > header.file_size {
+                let exp_end: usize = mem_start + header.memory_size as usize;
+                for byte in memory[mem_end..exp_end].iter_mut() { *byte = 0 };
+            }
         }
         Ok(())
     }
 
+    pub fn get_labels(&self) -> Result<Vec<(u32, String)>, String> {
+        let mut labels: Vec<(u32, String)> = Vec::new();
+        let headers: Vec<SectionHeader> = self.read_section_headers()?;
+
+        for header in 
+            headers.iter().filter(|h| h.section_type == SECTION_SYMTAB_KEY) {
+
+            // This use of the link data field is Unix - System V specific. 
+            let str_header: &SectionHeader = &headers[header.link as usize];
+            let str_table: String = self.load_string_table(str_header)?;
+
+            let entries: Vec<SymbolTableEntry> = self.read_table_entries(
+                (header.size / header.entrie_size) as u16, header.offset)?;
+
+            for entry in entries[1..].iter()
+                .filter(|e| LABEL_TYPES.contains(&(e.info & 0xf))) {
+
+                let str_start: usize = entry.name as usize;
+                if let Some((s, _)) = str_table[str_start..].split_once('\0') {
+                    if !s.starts_with("$") {
+                        labels.push((entry.value, String::from(s)));
+                    }
+                }
+            }
+        }
+        Ok(labels)
+    }
+
+    // todo make struct for relevant sections
+    pub fn get_text_section_range(&self) -> Result<(u32, u32), String> {
+        let headers: Vec<SectionHeader> = self.read_section_headers()?;
+
+        let str_header: &SectionHeader = 
+            &headers[self.elf_header.section_str_table_idx as usize];
+        let str_table: String = self.load_string_table(str_header)?;
+
+        for header in headers {
+            let str_start: usize = header.section_name as usize;
+            if let Some((s, _)) = str_table[str_start..].split_once('\0') {
+                if s == ".text" {
+                    return Ok((header.address, header.address + header.size));
+                }
+            }
+        }
+        Err(String::from("No .text section found!"))
+    }
+
     pub fn check_header_values(&self) -> Result<(), String> {
         match self.elf_header.check_values(
-            ELF_VERSION_KEY, 
-            ELF_TYPE_KEY, 
-            MACHINE_KEY, 
-            CLASS_KEY
+            ELF_VERSION_KEY, ELF_TYPE_KEY, MACHINE_KEY, 
+            CLASS_KEY, OSABI_KEY
         ) {
             Err(ValueError::Version) => {
                 Err(String::from("The ELF file has an invalid version!"))
@@ -80,6 +140,9 @@ impl ELFFile {
             Err(ValueError::Class) => {
                 Err(String::from("The ELF file is not 32-bit compatible!"))
             },
+            Err(ValueError::OsAbi) => {
+                Err(String::from("The ELF files traget is not Unix-SystemV!"))
+            }
             Ok(_) => Ok(())
         }
     }
@@ -92,28 +155,55 @@ impl ELFFile {
         self.encoding
     }
 
-    fn read_program_headers(&self) -> Result<Vec<ProgramHeader>, String> {
-        const HEADER_SIZE: usize = ProgramHeader::SIZE;
+    fn read_table_entries<H: ELFTableEntry>(
+        &self, num_entries: u16, table_offset: u32
+    ) -> Result<Vec<H>, String>  {
 
-        let num_headers: usize = self.elf_header.num_program_headers as usize;
-        let mut headers: Vec<ProgramHeader> = Vec::with_capacity(num_headers);
+        let header_size: usize = H::SIZE;
+        let num_headers: usize = num_entries as usize;
+        let mut headers: Vec<H> = Vec::with_capacity(num_headers);
 
-        let mut start: usize = self.elf_header.program_table_offset as usize;
-        let mut stop: usize = start + HEADER_SIZE;
+        let mut start: usize = table_offset as usize;
+        let mut stop: usize = start + header_size;
         for _ in 0..num_headers {
             if self.raw_data.len() < stop {
                 return Err(String::from(
-                    "Error while reading program headers! Check ELF file.",
+                    "Error while reading internal headers! Check ELF file.",
                 ));
             }
 
-            let header_bytes: [u8; HEADER_SIZE] =
-                self.raw_data[start..stop].try_into().unwrap();
-            headers.push(ProgramHeader::new(header_bytes, &self.encoding));
+            let header_bytes: &[u8] = &self.raw_data[start..stop];
+            headers.push(H::new(header_bytes, &self.encoding));
 
-            start += HEADER_SIZE;
-            stop += HEADER_SIZE;
+            start += header_size;
+            stop += header_size;
         }
         Ok(headers)
+    }
+
+    fn read_program_headers(&self) -> Result<Vec<ProgramHeader>, String> {
+        self.read_table_entries::<ProgramHeader>(
+            self.elf_header.num_program_headers, 
+            self.elf_header.program_table_offset
+        )
+    }
+
+    fn read_section_headers(&self) -> Result<Vec<SectionHeader>, String> {
+        self.read_table_entries::<SectionHeader>(
+            self.elf_header.num_section_headers, 
+            self.elf_header.section_table_offset
+        )
+    }
+
+    fn load_string_table(&self, table_header: &SectionHeader) 
+    -> Result<String, String> {
+        let start = table_header.offset as usize;
+        let stop = start + table_header.size as usize;
+        if self.raw_data.len() < stop {
+            return Err(String::from(
+                "Error while reading string_table! Check ELF file.",
+            ));
+        }
+        Ok(String::from_utf8_lossy(&self.raw_data[start..stop]).to_string())
     }
 }

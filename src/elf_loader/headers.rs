@@ -3,10 +3,9 @@ use std::mem::size_of;
 use crate::utils::{slice_to_u16, slice_to_u32, Endian};
 use super::{ELF_ID, HEADER_VERSION_KEY};
 
-pub enum ValueError { Version, Type, Machine, Class }
+pub enum ValueError { Version, Type, Machine, Class, OsAbi }
 
 #[repr(C)]
-#[derive(Debug)]
 pub struct ELFHeader {
     pub elf_id: [u8; 16],
     pub elf_type: u16,
@@ -21,7 +20,7 @@ pub struct ELFHeader {
     pub num_program_headers: u16,
     pub section_header_size: u16,
     pub num_section_headers: u16,
-    pub string_table_idx: u16,
+    pub section_str_table_idx: u16,
 }
 
 impl ELFHeader {
@@ -59,7 +58,7 @@ impl ELFHeader {
                 num_program_headers: slice_to_u16(&bytes[44..46], &enc),
                 section_header_size: slice_to_u16(&bytes[46..48], &enc),
                 num_section_headers: slice_to_u16(&bytes[48..50], &enc),
-                string_table_idx: slice_to_u16(&bytes[50..52], &enc),
+                section_str_table_idx: slice_to_u16(&bytes[50..52], &enc),
             },
             enc
         ))
@@ -70,7 +69,8 @@ impl ELFHeader {
         elf_version: u32,
         elf_type: u16,
         machine: u16,
-        class: u8
+        class: u8,
+        os_abi: u8
     ) -> Result<(), ValueError> {
         
         if self.elf_version != elf_version {
@@ -85,12 +85,19 @@ impl ELFHeader {
         if self.elf_id[4] != class {
             return Err(ValueError::Class);
         }
+        if self.elf_id[7] != os_abi {
+            return Err(ValueError::OsAbi);
+        }
         Ok(())
     }
 }
 
+pub trait ELFTableEntry: Sized {
+    const SIZE: usize;
+    fn new(bytes: &[u8], encoding: &Endian) -> Self;
+}
+
 #[repr(C)]
-#[derive(Debug)]
 pub struct ProgramHeader {
     pub program_type: u32,
     pub offset: u32,
@@ -101,11 +108,13 @@ pub struct ProgramHeader {
     pub flags: u32,
     pub align: u32,
 }
+impl ELFTableEntry for ProgramHeader {
+    const SIZE: usize = size_of::<ProgramHeader>();
 
-impl ProgramHeader {
-    pub const SIZE: usize = size_of::<ProgramHeader>();
-
-    pub fn new(bytes: [u8; ProgramHeader::SIZE], encoding: &Endian) -> Self {
+    fn new(bytes: &[u8], encoding: &Endian) -> ProgramHeader {
+        if bytes.len() != Self::SIZE {
+            panic!("Failed to create ProgramHeader. Wrong slice length!");
+        }
         Self {
             program_type: slice_to_u32(&bytes[0..4], encoding),
             offset: slice_to_u32(&bytes[4..8], encoding),
@@ -115,6 +124,69 @@ impl ProgramHeader {
             memory_size: slice_to_u32(&bytes[20..24], encoding),
             flags: slice_to_u32(&bytes[24..28], encoding),
             align: slice_to_u32(&bytes[28..32], encoding),
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct SectionHeader {
+    pub section_name: u32,
+    pub section_type: u32,
+    pub flags: u32,
+    pub address: u32,
+    pub offset: u32,
+    pub size: u32,
+    pub link: u32,
+    pub info: u32,
+    pub address_align: u32,
+    pub entrie_size: u32
+}
+impl ELFTableEntry for SectionHeader {
+    const SIZE: usize = size_of::<SectionHeader>();
+
+    fn new(bytes: &[u8], encoding: &Endian) -> SectionHeader {
+        if bytes.len() != SectionHeader::SIZE {
+            panic!("Failed to create SectionHeader. Wrong slice length!");
+        }
+        Self {
+            section_name: slice_to_u32(&bytes[0..4], encoding),
+            section_type: slice_to_u32(&bytes[4..8], encoding),
+            flags: slice_to_u32(&bytes[8..12], encoding),
+            address: slice_to_u32(&bytes[12..16], encoding),
+            offset: slice_to_u32(&bytes[16..20], encoding),
+            size: slice_to_u32(&bytes[20..24], encoding),
+            link: slice_to_u32(&bytes[24..28], encoding),
+            info: slice_to_u32(&bytes[28..32], encoding),
+            address_align: slice_to_u32(&bytes[32..36], encoding),
+            entrie_size:slice_to_u32(&bytes[36..40], encoding)
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct SymbolTableEntry {
+    pub name: u32,
+    pub value: u32,
+    pub size: u32,
+    pub info: u8,
+    pub other: u8,
+    pub section_index: u16
+}
+impl ELFTableEntry for SymbolTableEntry {
+    const SIZE: usize = size_of::<SymbolTableEntry>();
+
+    fn new(bytes: &[u8], encoding: &Endian) -> Self {
+        if bytes.len() != SymbolTableEntry::SIZE {
+            panic!("Failed to create SymbolTableEntry. Wrong slice length!");
+        }
+        Self {
+            name: slice_to_u32(&bytes[0..4], encoding),
+            value: slice_to_u32(&bytes[4..8], encoding),
+            size: slice_to_u32(&bytes[8..12], encoding),
+            info: bytes[12], other: bytes[13],
+            section_index: slice_to_u16(&bytes[14..16], encoding),
         }
     }
 }
