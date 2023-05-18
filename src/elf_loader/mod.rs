@@ -37,6 +37,10 @@ impl ELFFile {
             Err(_) => return Err(String::from("Failed to read the ELF file!"))
         };
 
+        ELFFile::load_raw(raw_data)
+    }
+
+    pub fn load_raw(raw_data: Vec<u8>) -> Result<Self, String> {
         if raw_data.len() < ELFHeader::SIZE {
             return Err(String::from("ELF file is to short to be valid!"));
         }

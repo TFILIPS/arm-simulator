@@ -1,4 +1,4 @@
-use std::{process::exit, ops::Range, iter::StepBy, fmt::Display, mem::transmute};
+use std::{ops::Range, iter::StepBy, fmt::Display, mem::transmute};
 
 use super::{
     SimulatedCPU, ARMv5CPU, names::{RegNames, FlagNames},
@@ -252,7 +252,8 @@ impl Instruction<ARMv5CPU, i32> for ARMv5Instruction {
                 };
                 function(cpu);
             }
-            ARMv5InstructionType::Undefined => 
+            ARMv5InstructionType::Undefined =>
+                //replace with error 
                 println!("Undefined Instruction!")
         }
     }
@@ -322,7 +323,6 @@ impl Display for ARMv5Instruction {
     }
 }
 
-const DEBUG_PRINT: bool = false;
 impl ARMv5CPU {
     fn and(
         &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
@@ -376,8 +376,6 @@ impl ARMv5CPU {
     fn rsb(
         &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
     ) {
-        if DEBUG_PRINT { println!("rsb"); }
-
         let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
@@ -883,25 +881,23 @@ impl ARMv5CPU {
 
     // Exception-generating instructions
     fn swi(&mut self) {
-        match (self.get_register_intern(RegNames::R0), self.get_register_intern(RegNames::R7)) {
+        let r0: i32 = self.get_register_intern(RegNames::R0);
+        let r7: i32 = self.get_register_intern(RegNames::R7);
+        match (r0, r7) {
             (1, 4) => {
-                let len = self.get_register_intern(RegNames::R2) as u32 as usize;
-                let addr = self.get_register_intern(RegNames::R1) as u32 as usize;
-                print!("{:#}", String::from_utf8_lossy(&self.memory[addr..addr+len]));
+                let l = self.get_register_intern(RegNames::R2) as u32 as usize;
+                let a = self.get_register_intern(RegNames::R1) as u32 as usize;
+                self.output_device.output(
+                    &String::from_utf8_lossy(&self.memory[a..a+l])
+                );
             },
-            (x, 1) => exit(x),
+            (x, 1) => self.exit_behaviour.exit(x),
             (_, _) => ()
         }
     }
 
     fn bkpt(&mut self) {
-        for i in 0..16 {
-            let reg: RegNames = i.into();
-            println!("{reg}: {:08x}", self.get_register_intern(reg));
-        }
-        println!("N: {}, Z: {}, C: {}, V: {}",
-            self.get_flag(FlagNames::N), self.get_flag(FlagNames::Z),
-            self.get_flag(FlagNames::C), self.get_flag(FlagNames::V));
+        //Breakpoint do nothing for now
     }
 
 
@@ -959,7 +955,7 @@ impl ARMv5CPU {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::{T, F};
+    use crate::utils::{T, F, ConsoleOutput, ConsoleExit};
     use crate::simulated_cpu::{
         SimulatedCPU, ARMv5CPU, RegNames, FlagNames, 
         operands::{ShifterOperand, barrel_shifter::ShiftType}
@@ -972,7 +968,7 @@ mod tests {
             fn $test_name() {
                 let (a, b, s, shift, c_in, exp_res, exp_flags) = $test_values;
 
-                let mut cpu: ARMv5CPU = ARMv5CPU::new();
+                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
                 cpu.set_register(RegNames::R1, a);
                 cpu.set_register(RegNames::R2, b);
                 cpu.flags[FlagNames::C] = c_in;

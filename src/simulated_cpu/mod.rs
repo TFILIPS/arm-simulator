@@ -3,7 +3,7 @@ use std::{io::Write, collections::HashMap};
 use names::{RegNames, FlagNames};
 use instruction_decoder::{InstructionDecoder, ARMv5Decoder};
 use instructions::Instruction;
-use crate::utils::{Endian, slice_to_u32};
+use crate::utils::{Endian, slice_to_u32, OutputDevice, ExitBehaviour};
 
 pub mod names;
 
@@ -22,6 +22,7 @@ pub trait SimulatedCPU<S> {
 
     fn get_register(&self, register: RegNames) -> S;
     fn set_register(&mut self, register: RegNames, value: S);
+    fn get_registers(&self) -> &[S];
     fn get_flag(&self, flag: FlagNames) -> bool;
     fn set_flag(&mut self, flag: FlagNames, value: bool);
     fn get_memory(&mut self) -> &mut Vec<u8>;
@@ -33,7 +34,9 @@ pub struct ARMv5CPU {
     registers: [i32; 16],
     flags: [bool; 4],
     memory: Vec<u8>,
-    encoding: Endian
+    encoding: Endian,
+    output_device: Box<dyn OutputDevice>,
+    exit_behaviour: Box<dyn ExitBehaviour>
 }
 impl SimulatedCPU<i32> for ARMv5CPU {
     fn step(&mut self) {
@@ -85,6 +88,10 @@ impl SimulatedCPU<i32> for ARMv5CPU {
         self.registers[register] = value;
     }
 
+    fn get_registers(&self) -> &[i32] {
+        &self.registers
+    }
+
     fn get_flag(&self, flag: FlagNames) -> bool {
         self.flags[flag]
     }
@@ -102,12 +109,15 @@ impl SimulatedCPU<i32> for ARMv5CPU {
     }
 }
 impl ARMv5CPU {
-    pub fn new() -> Self {  
+    pub fn new<O, E>(output_device: O, exit_behaviour: E) -> Self 
+    where O: OutputDevice + 'static, E: ExitBehaviour + 'static {
         Self {
             registers: [0i32; 16],
             flags: [false; 4],
             memory: vec![0u8; MEMORY_SIZE],
-            encoding: Endian::Little
+            encoding: Endian::Little,
+            output_device: Box::new(output_device),
+            exit_behaviour: Box::new(exit_behaviour)
         }
     }
 

@@ -1,4 +1,4 @@
-use std::ops::{Bound, RangeBounds};
+use std::{ops::{Bound, RangeBounds}, process::exit};
 
 pub const F: bool = false;
 pub const T: bool = true;
@@ -102,4 +102,30 @@ fn get_bounds<T: RangeBounds<usize>>(range: T, max: usize) -> (usize, usize) {
         panic!("The start index is larger than the end index! {start} > {end}");
     }
     (start, end)
+}
+
+pub trait OutputDevice {
+    fn output(&self, msg: &str);
+    fn output_err(&self, err: &str);
+}
+
+pub struct ConsoleOutput;
+impl OutputDevice for ConsoleOutput {
+    fn output(&self, msg: &str) {
+        print!("{msg}");
+    }
+    fn output_err(&self, err: &str) {
+        println!("{err}");
+    }
+}
+
+pub trait ExitBehaviour {
+    fn exit(&self, code: i32);
+}
+
+pub struct ConsoleExit;
+impl ExitBehaviour for ConsoleExit {
+    fn exit(&self, code: i32) {
+        exit(code);
+    }
 }
