@@ -57,7 +57,7 @@ impl BitAccess for u32 {
     }
 
     fn cut_bits<T: RangeBounds<usize>>(&self, range: T) -> u32 {
-        let (start, end) = get_bounds(range, 31);
+        let (start, end): (usize, usize) = get_bounds(range, 31);
         let lshift: usize = 31 - end;
         (*self << lshift) >> (start + lshift)
     }
@@ -72,14 +72,14 @@ impl BitAccess for u16 {
     }
 
     fn cut_bits<T: RangeBounds<usize>>(&self, range: T) -> u16 {
-        let (start, end) = get_bounds(range, 15);
+        let (start, end): (usize, usize) = get_bounds(range, 15);
         let lshift: usize = 15 - end;
         (*self << lshift) >> (start + lshift)
     }
 }
 
 fn get_bounds<T: RangeBounds<usize>>(range: T, max: usize) -> (usize, usize) {
-    let start = match range.start_bound() {
+    let start: usize = match range.start_bound() {
         Bound::Included(&x) => x,
         Bound::Excluded(&x) => x + 1,
         Bound::Unbounded => 0
@@ -88,7 +88,7 @@ fn get_bounds<T: RangeBounds<usize>>(range: T, max: usize) -> (usize, usize) {
         panic!("Provided start index is to large! index > {max}");
     }
 
-    let end = match range.end_bound() {
+    let end: usize = match range.end_bound() {
         Bound::Included(&x) => x,
         Bound::Excluded(&x) if x > 0 => x - 1,
         Bound::Excluded(_) => panic!("Provided end index is negative!"),
@@ -115,7 +115,7 @@ impl OutputDevice for ConsoleOutput {
         print!("{msg}");
     }
     fn output_err(&self, err: &str) {
-        println!("{err}");
+        eprint!("{err}");
     }
 }
 

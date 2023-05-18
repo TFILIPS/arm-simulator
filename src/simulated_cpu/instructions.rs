@@ -253,8 +253,7 @@ impl Instruction<ARMv5CPU, i32> for ARMv5Instruction {
                 function(cpu);
             }
             ARMv5InstructionType::Undefined =>
-                //replace with error 
-                println!("Undefined Instruction!")
+                cpu.output_device.output_err("Undefined Instruction!\n")
         }
     }
 }
@@ -591,7 +590,7 @@ impl ARMv5CPU {
         let a: i32 = self.get_register_intern(rm);
         let b: i32 = self.get_register_intern(rs);
 
-        let result = a.wrapping_mul(b);
+        let result: i32 = a.wrapping_mul(b);
         self.set_register(rd, result);
 
         if s {
@@ -608,7 +607,7 @@ impl ARMv5CPU {
         let b: i32 = self.get_register_intern(rs);
         let c: i32 = self.get_register_intern(rn);
 
-        let result = a.wrapping_mul(b).wrapping_add(c);
+        let result: i32 = a.wrapping_mul(b).wrapping_add(c);
         self.set_register(rd, result);
 
         if s {
@@ -709,7 +708,7 @@ impl ARMv5CPU {
             self.set_register(RegNames::LR, link_addr);
         }
 
-        let new_prog_addr = prog_addr.wrapping_add(si << 2);
+        let new_prog_addr: i32 = prog_addr.wrapping_add(si << 2);
         self.set_register(RegNames::PC, new_prog_addr);
     }
 
@@ -724,7 +723,7 @@ impl ARMv5CPU {
             self.set_register(RegNames::LR, link_addr);
         }
 
-        let target = self.get_register_intern(rm);
+        let target: i32 = self.get_register_intern(rm);
         self.set_register(RegNames::PC, target);
     }
 
@@ -785,7 +784,7 @@ impl ARMv5CPU {
         let mut address: usize = self.compute_modify_address(am);
         address &= 0xFFFFFFFC;
 
-        let value = self.get_register_intern(rd) as u32;
+        let value: u32 = self.get_register_intern(rd) as u32;
         let bytes: [u8; 4] = u32_to_array(value, &self.encoding);
         
         self.memory.splice(address..address+4, bytes);
@@ -842,7 +841,7 @@ impl ARMv5CPU {
                 let address: usize = addresses.next().unwrap() & 0xFFFFFFFC;
                 
                 let reg_name: RegNames = (i as u32).into();
-                let value = self.get_register_intern(reg_name);
+                let value: i32 = self.get_register_intern(reg_name);
 
                 let bytes: [u8; 4] = match self.encoding {
                     crate::utils::Endian::Little => value.to_le_bytes(),
@@ -885,8 +884,10 @@ impl ARMv5CPU {
         let r7: i32 = self.get_register_intern(RegNames::R7);
         match (r0, r7) {
             (1, 4) => {
-                let l = self.get_register_intern(RegNames::R2) as u32 as usize;
-                let a = self.get_register_intern(RegNames::R1) as u32 as usize;
+                let l: usize = 
+                    self.get_register_intern(RegNames::R2) as u32 as usize;
+                let a: usize = 
+                    self.get_register_intern(RegNames::R1) as u32 as usize;
                 self.output_device.output(
                     &String::from_utf8_lossy(&self.memory[a..a+l])
                 );
@@ -903,53 +904,65 @@ impl ARMv5CPU {
 
     // Status register access instructions
     fn mrs(&mut self) {
-        panic!("Register not supported yet!")
+        self.output_device
+            .output_err("Full status register not supported yes!\n");
     }
 
     fn msr(&mut self) {
-        panic!("Register not supported yet!")
+        self.output_device
+            .output_err("Full status register not supported yes!\n");
     }
 
 
     // Coprocessor instructions
     fn cdp(&mut self) {
-        panic!("Coprocessor instructions not supported!")
+        self.output_device
+            .output_err("Coprocessor instructions not supported!\n");
     }
 
     fn cdp2(&mut self) {
-        panic!("Coprocessor instructions not supported!")
+        self.output_device
+            .output_err("Coprocessor instructions not supported!\n");
     }
 
     fn ldc(&mut self) {
-        panic!("Coprocessor instructions not supported!")
+        self.output_device
+            .output_err("Coprocessor instructions not supported!\n");
     }
 
     fn ldc2(&mut self) {
-        panic!("Coprocessor instructions not supported!")
+        self.output_device
+            .output_err("Coprocessor instructions not supported!\n");
     }
 
     fn mcr(&mut self) {
-        panic!("Coprocessor instructions not supported!")
+        self.output_device
+            .output_err("Coprocessor instructions not supported!\n");
     }
 
     fn mcr2(&mut self) {
-        panic!("Coprocessor instructions not supported!")
+        self.output_device
+            .output_err("Coprocessor instructions not supported!\n");
     }
 
     fn mrc(&mut self) {
-        panic!("Coprocessor instructions not supported!")
+        self.output_device
+            .output_err("Coprocessor instructions not supported!\n");
     }
 
     fn mrc2(&mut self) {
-        panic!("Coprocessor instructions not supported!")
+        self.output_device
+            .output_err("Coprocessor instructions not supported!\n");
     }
 
     fn stc(&mut self) {
-        panic!("Coprocessor instructions not supported!")
+        self.output_device
+            .output_err("Coprocessor instructions not supported!\n");
     }
 
     fn stc2(&mut self) {
-        panic!("Coprocessor instructions not supported!")
+        self.output_device
+            .output_err("Coprocessor instructions not supported!\n");
     }
 }
 

@@ -23,9 +23,9 @@ fn main() {
 
     if disassemble {
         let (text_start, text_end): (u32, u32) = 
-        elf_file.get_text_section_range().unwrap_or_else(print_and_exit);
-
-        let labels = elf_file.get_labels().unwrap_or_else(print_and_exit);
+            elf_file.get_text_section_range().unwrap_or_else(print_and_exit);
+        let labels: Vec<(u32, String)> = 
+            elf_file.get_labels().unwrap_or_else(print_and_exit);
         print!("{}", cpu.disassemble_memory(text_start, text_end, labels));
     }
     else { loop { cpu.step(); } }
