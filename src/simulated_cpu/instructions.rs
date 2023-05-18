@@ -1097,4 +1097,116 @@ mod tests {
         rsc_test_5: 
             (2, 3, F, 0, F, 0, [F; 4])
     }
+
+    data_processing_tests! {
+        function: tst,
+        tst_test_1: 
+            (0b1011101, 0b1101011, T, 0, T, 0, [F, F, T, F]),
+        tst_test_2: 
+            (0b101010, 0b101010, T, 1, F, 0, [F, T, F, F]),
+        tst_test_3: 
+            (i32::MIN, -1, F, 0, T, 0, [T, F, T, F]),
+        tst_test_4: 
+            (-1, 4, F, 3, F, 0, [F, T, T, F]),
+        tst_test_5: 
+            (1, 1, T, 2, T, 0, [F, T, F, F])
+    }
+
+    data_processing_tests! {
+        function: teq,
+        teq_test_1: 
+            (0b1011101, 0b1101011, T, 0, T, 0, [F, F, T, F]),
+        teq_test_2: 
+            (0b101010, 0b1010100, T, 1, F, 0, [F, T, F, F]),
+        teq_test_3: 
+            (i32::MIN, 0, F, 0, T, 0, [T, F, T, F]),
+        teq_test_4: 
+            (0, 4, F, 3, F, 0, [F, T, T, F]),
+        teq_test_5: 
+            (0, 1, T, 2, T, 0, [F, T, F, F])
+    }
+
+    data_processing_tests! {
+        function: cmp,
+        cmp_test_1: 
+            (5, 7, T, 0, T, 0, [T, F, F, F]),
+        cmp_test_2: 
+            (3, 3, T, 0, F, 0, [F, T, T, F]),
+        cmp_test_3: 
+            (i32::MIN, 1, F, 0, T, 0, [F, F, T, T]),
+        cmp_test_4: 
+            (10, 2, F, 1, F, 0, [F, F, T, F]),
+        cmp_test_5: 
+            (3, -3, T, 0, T, 0, [F; 4])
+    }
+
+    data_processing_tests! {
+        function: cmn,
+        cmn_test_1: 
+            (12, 7, T, 0, T, 0, [F; 4]),
+        cmn_test_2: 
+            (1, -1, T, 0, F, 0, [F, T, T, F]),
+        cmn_test_3: 
+            (i32::MAX, 2, F, 1, F, 0, [T, F, F, T]),
+        cmn_test_4: 
+            (i32::MIN, -1, F, 0, T, 0, [F, F, T, T]),
+        cmn_test_5: 
+            (1, 1, T, 1, F, 0, [F; 4])
+    }
+
+    data_processing_tests! {
+        function: orr,
+        orr_test_1: 
+            (0b1011101, 0b1001001, T, 0, T, 0b1011101, [F, F, T, F]),
+        orr_test_2: 
+            (0, 0, T, 1, F, 0, [F, T, F, F]),
+        orr_test_3: 
+            (1, -1, T, 0, F, -1, [T, F, F, F]),
+        orr_test_4: 
+            (i32::MIN, 4, T, 3, F, i32::MIN, [T, F, T, F]),
+        orr_test_5: 
+            (0, 1, F, 1, F, 0, [F; 4])
+    }
+
+    data_processing_tests! {
+        function: mov,
+        mov_test_1: 
+            (-1, 23, T, 0, T, 23, [F, F, T, F]),
+        mov_test_2: 
+            (-1, 7, T, 1, F, 3, [F, F, T, F]),
+        mov_test_3: 
+            (-1, -30, T, 0, F, -30, [T, F, F, F]),
+        mov_test_4: 
+            (-1, 3, T, 3, T, 0, [F, T, F, F]),
+        mov_test_5: 
+            (-1, -30, F, 0, T, -30, [F, F, T, F])
+    }
+
+    data_processing_tests! {
+        function: bic,
+        bic_test_1: 
+            (0b1011101, 0b0010100, T, 0, T, 0b1001001, [F, F, T, F]),
+        bic_test_2: 
+            (0b0101010, 0b1010100, T, 1, T, 0, [F, T, F, F]),
+        bic_test_3: 
+            (i32::MIN, 0, T, 0, F, i32::MIN, [T, F, F, F]),
+        bic_test_4: 
+            (1, 12, T, 3, F, 0, [F, T, T, F]),
+        bic_test_5: 
+            (1, -2, F, 1, F, 0, [F; 4])
+    }
+
+    data_processing_tests! {
+        function: mvn,
+        mvn_test_1: 
+            (-1, -24, T, 0, T, 23, [F, F, T, F]),
+        mvn_test_2: 
+            (-1, -1, T, 1, F, i32::MIN, [T, F, T, F]),
+        mvn_test_3: 
+            (-1, 30, T, 1, T, -16, [T, F, F, F]),
+        mvn_test_4: 
+            (-1, -1, T, 0, F, 0, [F, T, F, F]),
+        mvn_test_5: 
+            (-1, 29, F, 0, T, -30, [F, F, T, F])
+    }
 }
