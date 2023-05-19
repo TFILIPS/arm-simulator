@@ -979,7 +979,7 @@ mod tests {
         => {$(
             #[test]
             fn $test_name() {
-                let (a, b, s, shift, c_in, exp_res, exp_flags) = $test_values;
+                let (a, b, s, shift, c_in, res, exp_flags) = $test_values;
 
                 let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
                 cpu.set_register(RegNames::R1, a);
@@ -993,7 +993,7 @@ mod tests {
                 };
 
                 cpu.$function(s, RegNames::R1, RegNames::R0, so);
-                assert_eq!(exp_res, cpu.get_register_intern(RegNames::R0));
+                assert_eq!(res, cpu.get_register_intern(RegNames::R0));
                 assert_eq!(exp_flags, cpu.flags);
             }
         )*}
@@ -1221,5 +1221,112 @@ mod tests {
             (-1, -1, T, 0, F, 0, [F, T, F, F]),
         mvn_test_5: 
             (-1, 29, F, 0, T, -30, [F, F, T, F])
+    }
+
+    macro_rules! multiply_tests {
+        (function: $function:ident, $($test_name:ident: $test_values:expr),*) 
+        => {$(
+            #[test]
+            fn $test_name() {
+                let (a, b, c, d, s, res_lo, res_hi, exp_flags) = $test_values;
+
+                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+                cpu.set_register(RegNames::R0, a);
+                cpu.set_register(RegNames::R1, b);
+                cpu.set_register(RegNames::R2, c);
+                cpu.set_register(RegNames::R3, d);
+
+                cpu.$function(s, RegNames::R3, 
+                    RegNames::R2, RegNames::R0, RegNames::R1);
+
+                assert_eq!(res_lo, cpu.get_register_intern(RegNames::R2));
+                assert_eq!(res_hi, cpu.get_register_intern(RegNames::R3));
+                assert_eq!(exp_flags, cpu.flags);
+            }
+        )*}
+    }
+
+    multiply_tests!{
+        function: mul,
+        mul_test_1: 
+            (17, 32, 1, 3, T, 1, 544, [F; 4]),
+        mul_test_2: 
+            (34, -9, -8, 2, T, -8, -306, [T, F, F, F]),
+        mul_test_3: 
+            (0, 85, 3, -5, T, 3, 0, [F, T, F, F]),
+        mul_test_4: 
+            (32768, 131072, 0, 8, T, 0, 0, [F, T, F, F]),
+        mul_test_5: 
+            (-38, 987, -1, 0, F, -1, -37506, [F; 4])
+    }
+
+    multiply_tests!{
+        function: mla,
+        mla_test_1: 
+            (12, 17, 6, 3, T, 6, 210, [F; 4]),
+        mla_test_2: 
+            (8, -26, 50, 2, T, 50, -158, [T, F, F, F]),
+        mla_test_3: 
+            (2, 45, -90, -5, T, -90, 0, [F, T, F, F]),
+        mla_test_4: 
+            (32768, 131072, 15, 8, T, 15, 15, [F; 4]),
+        mla_test_5: 
+            (-38, 187, -14, 0, F, -14, -7120, [F; 4])
+    }
+
+    multiply_tests!{
+        function: smull,
+        smull_test_1: 
+            (11, 89, 1, 3, T, 979, 0, [F; 4]),
+        smull_test_2: 
+            (17, -28, -8, 2, T, -476, -1, [T, F, F, F]),
+        smull_test_3: 
+            (0, 85, 3, -5, T, 0, 0, [F, T, F, F]),
+        smull_test_4: 
+            (334375, 230893, 0, 8, T, -104564453, 17, [F; 4]),
+        smull_test_5: 
+            (17, -28, -8, 0, F, -476, -1, [F; 4])
+    }
+
+    multiply_tests!{
+        function: umull,
+        umull_test_1: 
+            (26, 92, 1, 3, T, 2392, 0, [F; 4]),
+        umull_test_2: 
+            (-1, -1, -8, 2, T, 1, -2, [T, F, F, F]),
+        umull_test_3: 
+            (0, 129, 3, -5, T, 0, 0, [F, T, F, F]),
+        umull_test_4: 
+            (838299, 756273, 0, 8, T, -1672260181, 147, [F; 4]),
+        umull_test_5: 
+            (-1, -1, -1, 0, F, 1, -2, [F; 4])
+    }
+    
+    multiply_tests!{
+        function: smlal,
+        smlal_test_1: 
+            (83, 32, 102, 0, T, 2758, 0, [F; 4]),
+        smlal_test_2: 
+            (729276, -937263, 76, 120, T, -623611448, -40, [T, F, F, F]),
+        smlal_test_3: 
+            (2, -85, 170, 0, T, 0, 0, [F, T, F, F]),
+        smlal_test_4: 
+            (-042003, 300160, 8838, -3729, T, 277290246, -3732, [T, F, F, F]),
+        smlal_test_5: 
+            (729276, -937263, 76, 120, F, -623611448, -40, [F; 4])
+    }
+    
+    multiply_tests!{
+        function: umlal,
+        umlal_test_1: 
+            (15, 64, 111, 0, T, 1071, 0, [F; 4]),
+        umlal_test_2: 
+            (-1, -1, 10, -92, T, 11, -94, [T, F, F, F]),
+        umlal_test_3: 
+            (3, 43, -129, 0, T, 0, 0, [F, T, F, F]),
+        umlal_test_4: 
+            (57356, -97526, 736, -847, T, -1298733224, 56507, [F; 4]),
+        umlal_test_5: 
+            (-1, -1, 10, -92, F, 11, -94, [F; 4])
     }
 }
