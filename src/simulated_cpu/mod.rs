@@ -25,6 +25,7 @@ pub trait SimulatedCPU<S> {
     fn get_registers(&self) -> &[S];
     fn get_flag(&self, flag: FlagNames) -> bool;
     fn set_flag(&mut self, flag: FlagNames, value: bool);
+    fn get_flags(&self) -> &[bool];
     fn get_memory(&mut self) -> &mut Vec<u8>;
     fn set_encoding(&mut self, encoding: Endian);
 }
@@ -98,6 +99,10 @@ impl SimulatedCPU<i32> for ARMv5CPU {
 
     fn set_flag(&mut self, flag: FlagNames, value: bool) {
         self.flags[flag] = value
+    }
+
+    fn get_flags(&self) -> &[bool] {
+        &self.flags
     }
 
     fn get_memory(&mut self) -> &mut Vec<u8> {
