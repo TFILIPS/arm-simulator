@@ -6,6 +6,7 @@ version = 3
 name = "arm-simulator"
 version = "0.1.0"
 dependencies = [
+ "js-sys",
  "wasm-bindgen",
 ]
 
@@ -20,6 +21,15 @@ name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
+
+[[package]]
+name = "js-sys"
+version = "0.3.63"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f37a4a5928311ac501dee68b3c7613a1037d0edb30c8e5427bd832d55d1b790"
+dependencies = [
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "log"
