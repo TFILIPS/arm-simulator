@@ -78,8 +78,8 @@ pub enum OffsetType {
 
 #[derive(Clone, Copy)]
 pub struct AddressingModeMultiple { 
-    pub p: bool, pub(super) u: bool, pub(super) w: bool, 
-    pub rn: RegNames, pub(super) register_list: u16
+    pub p: bool, pub u: bool, pub w: bool, 
+    pub rn: RegNames, pub register_list: u16
 }
 impl Display for AddressingModeMultiple {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

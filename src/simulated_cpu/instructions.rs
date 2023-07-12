@@ -857,7 +857,7 @@ impl ARMv5CPU {
 
     fn swp(&mut self, rn: RegNames, rd: RegNames, rm: RegNames) {
         let mut address: usize = self.get_register_intern(rn) as u32 as usize;
-        let rot_bits: u32 = (address as u32).cut_bits(0..=1);
+        let rot_bits: u32 = (address as u32).cut_bits(0..=1) * 8;
         address &= 0xFFFFFFFC;
 
         let bytes: &[u8] = &self.memory[address..address+4];
@@ -866,7 +866,6 @@ impl ARMv5CPU {
 
         let sv: u32 = self.get_register_intern(rm) as u32;
         let bytes: [u8; 4] = u32_to_array(sv, &self.encoding);
-        
         self.memory.splice(address..address+4, bytes);
         self.set_register(rd, lv as i32);
     }
@@ -905,12 +904,12 @@ impl ARMv5CPU {
     // Status register access instructions
     fn mrs(&mut self) {
         self.output_device
-            .output_err("Full status register not supported yes!\n");
+            .output_err("Full status register not supported yet!\n");
     }
 
     fn msr(&mut self) {
         self.output_device
-            .output_err("Full status register not supported yes!\n");
+            .output_err("Full status register not supported yet!\n");
     }
 
 
@@ -973,7 +972,7 @@ mod tests {
         SimulatedCPU, ARMv5CPU, RegNames, FlagNames, 
         operands::{
             ShifterOperand, barrel_shifter::ShiftType, 
-            AddressingMode, OffsetType 
+            AddressingMode, OffsetType, AddressingModeMultiple
         }
     };
 
@@ -1363,81 +1362,107 @@ mod tests {
 
     //todo branch instructions but first implement unconditional instructions (bx)
 
+
     macro_rules! load_tests {
         (function: $function:ident, $($test_name:ident: $test_values:expr),*) 
         => {$(
             #[test]
             fn $test_name() {
-                let (bytes, address, offset, encoding, result) = $test_values;
+                let (bytes, addr, offset, enc, pc, result) = $test_values;
 
                 let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
-                cpu.set_encoding(encoding);
-                cpu.set_register(RegNames::R1, address);
+                cpu.set_encoding(enc);
+                cpu.set_register(RegNames::R1, addr);
                 let am = AddressingMode {
                     p: T, u: T, w: F, rn: RegNames::R1, 
                     offset_type: OffsetType::Immediate{ offset }
                 };
 
-                let address = (address + (offset as i32)) as u32 as usize;
+                let address = (addr + (offset as i32)) as u32 as usize;
                 cpu.memory.splice(address..address+4, bytes);
+                
+                let register = if pc { RegNames::PC } else { RegNames::R1 };
 
-                cpu.$function(RegNames::R0, am);
-                assert_eq!(result, cpu.get_register(RegNames::R0));            
+                cpu.$function(register, am);
+                assert_eq!(result, cpu.get_register(register));            
             }
         )*}
     }
 
     load_tests! {
         function: ldr,
-        ldr_test_1: ([58, 222, 104, 177], 0x2124, 0x0, Endian::Big, 987654321),
-        ldr_test_2: ([173, 183, 78, 31], 0, 0, Endian::Little, 525252525),
-        ldr_test_3: ([0, 92, 166, 215], 0x2124, 0x64, Endian::Big, 6072023),
-        ldr_test_4: ([0, 92, 166, 215], 0x2126, 0x0, Endian::Big, 6029312),
-        ldr_test_5: ([0, 92, 166, 215], 0x2124, 0x1, Endian::Little, 10902528)
+        ldr_test_1: 
+            ([58, 222, 104, 177], 0x2124, 0x0, Endian::Big, F, 987654321),
+        ldr_test_2: 
+            ([173, 183, 78, 31], 0x0, 0x0, Endian::Little, T, 525252524),
+        ldr_test_3: 
+            ([0, 92, 166, 215], 0x2124, 0x64, Endian::Big, F, 6072023),
+        ldr_test_4: 
+            ([0, 92, 166, 215], 0x2126, 0x0, Endian::Big, F, 6029312),
+        ldr_test_5: 
+            ([3, 92, 166, 215], 0x2124, 0x1, Endian::Little, T, 10902530)
     }
 
     load_tests! {
         function: ldrb,
-        ldrb_test_1: ([58, 222, 104, 177], 0x2127, 0, Endian::Big, 58),
-        ldrb_test_2: ([173, 183, 78, 31], 0, 0, Endian::Little, 173),
-        ldrb_test_3: ([0, 92, 166, 215], 0x2124, 0x64, Endian::Big, 0)
+        ldrb_test_1: 
+            ([58, 222, 104, 177], 0x2127, 0, Endian::Big, F, 58),
+        ldrb_test_2: 
+            ([173, 183, 78, 31], 0, 0, Endian::Little, T, 173),
+        ldrb_test_3: 
+            ([0, 92, 166, 215], 0x2124, 0x64, Endian::Big, F, 0)
     }
 
     load_tests! {
         function: ldrbt,
-        ldrbt_test_1: ([58, 222, 104, 177], 0x2127, 0, Endian::Big, 58),
-        ldrbt_test_2: ([173, 183, 78, 31], 0, 0, Endian::Little, 173),
-        ldrbt_test_3: ([0, 92, 166, 215], 0x2124, 0x64, Endian::Big, 0)
+        ldrbt_test_1: 
+            ([58, 222, 104, 177], 0x2127, 0, Endian::Big, F, 58),
+        ldrbt_test_2: 
+            ([173, 183, 78, 31], 0, 0, Endian::Little, T, 173),
+        ldrbt_test_3: 
+            ([0, 92, 166, 215], 0x2124, 0x64, Endian::Big, F, 0)
     }
 
     load_tests! {
         function: ldrh,
-        ldrh_test_1: ([58, 222, 104, 177], 0x2126, 0, Endian::Big, 15070),
-        ldrh_test_2: ([173, 183, 78, 31], 0, 0, Endian::Little, 47021),
-        ldrh_test_3: ([0, 92, 166, 215], 0x2124, 0x64, Endian::Big, 92)
+        ldrh_test_1: 
+            ([58, 222, 104, 177], 0x2126, 0, Endian::Big, F, 15070),
+        ldrh_test_2: 
+            ([173, 183, 78, 31], 0, 0, Endian::Little, F, 47021),
+        ldrh_test_3: 
+            ([0, 92, 166, 215], 0x2124, 0x64, Endian::Big, T, 92)
     }
 
-    // found fault: ldrsb did not extend the sign
+    // found fault: ldrsb did not extend the sign (fixed)
     load_tests! {
         function: ldrsb,
-        ldrsb_test_1: ([58, 222, 104, 177], 0x2127, 0, Endian::Big, 58),
-        ldrsb_test_2: ([173, 183, 78, 31], 0, 0, Endian::Little, -83),
-        ldrsb_test_3: ([255, 92, 166, 215], 0x2124, 0x64, Endian::Big, -1)
+        ldrsb_test_1: 
+            ([58, 222, 104, 177], 0x2127, 0, Endian::Big, T, 58),
+        ldrsb_test_2: 
+            ([173, 183, 78, 31], 0, 0, Endian::Little, F, -83),
+        ldrsb_test_3: 
+            ([255, 92, 166, 215], 0x2124, 0x64, Endian::Big, F, -1)
     }
 
-    // found fault: ldrsh did not extend the sign
+    // found fault: ldrsh did not extend the sign (fixed)
     load_tests! {
         function: ldrsh,
-        ldrsh_test_1: ([58, 222, 104, 177], 0x2126, 0, Endian::Big, 15070),
-        ldrsh_test_2: ([173, 183, 78, 31], 0, 0, Endian::Little, -18515),
-        ldrsh_test_3: ([255, 255, 166, 215], 0x2124, 0x64, Endian::Big, -1)
+        ldrsh_test_1: 
+            ([58, 222, 104, 177], 0x2126, 0, Endian::Big, F, 15070),
+        ldrsh_test_2: 
+            ([173, 183, 78, 31], 0, 0, Endian::Little, T, -18515),
+        ldrsh_test_3: 
+            ([255, 255, 166, 215], 0x2124, 0x64, Endian::Big, F, -1)
     }
 
     load_tests! {
         function: ldrt,
-        ldrt_test_1: ([58, 222, 104, 177], 0x2124, 0, Endian::Big, 987654321),
-        ldrt_test_2: ([173, 183, 78, 31], 0, 0, Endian::Little, 525252525),
-        ldrt_test_3: ([0, 92, 166, 215], 0x2124, 0x64, Endian::Big, 6072023)
+        ldrt_test_1: 
+            ([58, 222, 104, 177], 0x2124, 0, Endian::Big, F, 987654321),
+        ldrt_test_2: 
+            ([173, 183, 78, 31], 0, 0, Endian::Little, F, 525252525),
+        ldrt_test_3: 
+            ([0, 92, 166, 215], 0x2124, 0x64, Endian::Big, T, 6072022)
     }
 
     macro_rules! store_tests {
@@ -1467,39 +1492,175 @@ mod tests {
 
     store_tests! {
         function: str,
-        str_test_1: (987654321, 0x2124, 0, Endian::Big, [58, 222, 104, 177]),
-        str_test_2: (525252525, 0, 0, Endian::Little, [173, 183, 78, 31]),
-        str_test_3: (6072023, 0x2124, 0x64, Endian::Big, [0, 92, 166, 215]),
-        str_test_4: (6072023, 0x2125, 0x64, Endian::Little, [166, 92, 0, 0]),
-        str_test_5: (6072023, 0x2124, 0x66, Endian::Big, [166, 215, 0, 0])
+        str_test_1: 
+            (987654321, 0x2124, 0, Endian::Big, [58, 222, 104, 177]),
+        str_test_2: 
+            (525252525, 0, 0, Endian::Little, [173, 183, 78, 31]),
+        str_test_3: 
+            (6072023, 0x2124, 0x64, Endian::Big, [0, 92, 166, 215]),
+        str_test_4: 
+            (6072023, 0x2125, 0x64, Endian::Little, [166, 92, 0, 0]),
+        str_test_5: 
+            (6072023, 0x2124, 0x66, Endian::Big, [166, 215, 0, 0])
     }
 
     store_tests! {
         function: strb,
-        strb_test_1: (987654321, 0x2127, 0, Endian::Big, [177, 0, 0, 0]),
-        strb_test_2: (525252525, 0, 0, Endian::Little, [173, 0, 0, 0]),
-        strb_test_3: (6072023, 0x2124, 0x64, Endian::Big, [215, 0, 0, 0])
+        strb_test_1: 
+            (987654321, 0x2127, 0, Endian::Big, [177, 0, 0, 0]),
+        strb_test_2: 
+            (525252525, 0, 0, Endian::Little, [173, 0, 0, 0]),
+        strb_test_3: 
+            (6072023, 0x2124, 0x64, Endian::Big, [215, 0, 0, 0])
     }
 
     store_tests! {
         function: strbt,
-        strbt_test_1: (987654321, 0x2127, 0, Endian::Big, [177, 0, 0, 0]),
-        strbt_test_2: (525252525, 0, 0, Endian::Little, [173, 0, 0, 0]),
-        strbt_test_3: (6072023, 0x2124, 0x64, Endian::Big, [215, 0, 0, 0])
+        strbt_test_1: 
+            (987654321, 0x2127, 0, Endian::Big, [177, 0, 0, 0]),
+        strbt_test_2: 
+            (525252525, 0, 0, Endian::Little, [173, 0, 0, 0]),
+        strbt_test_3: 
+            (6072023, 0x2124, 0x64, Endian::Big, [215, 0, 0, 0])
     }
 
     store_tests! {
         function: strh,
-        strh_test_1: (987654321, 0x2126, 0, Endian::Big, [104, 177, 0, 0]),
-        strh_test_2: (525252525, 0, 0, Endian::Little, [173, 183, 0, 0]),
-        strh_test_3: (6072023, 0x2124, 0x64, Endian::Big, [166, 215, 0, 0])
+        strh_test_1: 
+            (987654321, 0x2126, 0, Endian::Big, [104, 177, 0, 0]),
+        strh_test_2: 
+            (525252525, 0, 0, Endian::Little, [173, 183, 0, 0]),
+        strh_test_3: 
+            (6072023, 0x2124, 0x64, Endian::Big, [166, 215, 0, 0])
     }
 
     store_tests! {
         function: strt,
-        strt_test_1: (987654321, 0x2124, 0, Endian::Big, [58, 222, 104, 177]),
-        strt_test_2: (525252525, 0, 0, Endian::Little, [173, 183, 78, 31]),
-        strt_test_3: (6072023, 0x2124, 0x64, Endian::Big, [0, 92, 166, 215])
+        strt_test_1: 
+            (987654321, 0x2124, 0, Endian::Big, [58, 222, 104, 177]),
+        strt_test_2: 
+            (525252525, 0, 0, Endian::Little, [173, 183, 78, 31]),
+        strt_test_3: 
+            (6072023, 0x2124, 0x64, Endian::Big, [0, 92, 166, 215])
     }
 
+    macro_rules! load_multiple_tests {
+        ($($test_name:ident: $test_values:expr),*) 
+        => {$(
+            #[test]
+            fn $test_name() {
+                let (bytes, address, encoding, result) = $test_values;
+
+                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+                cpu.set_encoding(encoding);
+                cpu.set_register(RegNames::R1, address);
+                let amm = AddressingModeMultiple {
+                    p: F, u: T, w: F, rn: RegNames::R1, register_list: 0x8008
+                };
+
+                let address = address as u32 as usize;
+                cpu.memory.splice(address..address+8, bytes);
+
+                cpu.ldm(amm);
+                
+                assert_eq!(result, [
+                        cpu.get_register(RegNames::R3), 
+                        cpu.get_register(RegNames::PC)
+                    ]); 
+            }
+        )*}
+    }
+
+    load_multiple_tests! {
+        ldm_test_1: 
+            ([1,2,3,4,5,6,7,8], 0x3928, Endian::Big, [16909060, 84281096]),
+        ldm_test_2:
+            ([1,2,3,4,4,6,7,8], 0x3928, Endian::Little, [67305985, 134678020]),
+        ldm_test_3: 
+            ([255,255,255,255,0,0,0,0], 0x27, Endian::Big, [255, -256]),
+        ldm_test_4:
+            ([0,0,0,7,0,0,0,7], 0x24, Endian::Big, [7, 6])
+    }
+
+    macro_rules! store_multiple_tests {
+        ($($test_name:ident: $test_values:expr),*)
+        => {$(
+            #[test]
+            fn $test_name() {
+                let (values, address, encoding, result) = $test_values;
+
+                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+                cpu.set_encoding(encoding);
+                cpu.set_register(RegNames::R1, address);
+                let amm = AddressingModeMultiple {
+                    p: F, u: T, w: F, rn: RegNames::R1, register_list: 0x8020
+                };
+
+                cpu.set_register(RegNames::R5, values[0]);
+                cpu.set_register(RegNames::PC, values[1]);
+
+                cpu.stm(amm);
+
+                let address = address as u32 as usize;
+                let bytes = &cpu.memory[address..address+8];
+                assert_eq!(result, bytes);            
+            }
+        )*}
+    }
+    
+    store_multiple_tests! {
+        stm_test_1: 
+            ([16909060, 84281096], 0x3928, Endian::Big, [1,2,3,4,5,6,7,16]),
+        stm_test_2: 
+            ([67305985, 134678021], 0x3928, Endian::Little, [1,2,3,4,13,6,7,8]),
+        stm_test_3: 
+            ([255, -256], 0x27, Endian::Big, [255,255,255,255,8,0,0,0])
+    }
+
+    macro_rules! swap_tests {
+        (function: $function:ident, $($test_name:ident: $test_values:expr),*) 
+        => {$(
+            #[test]
+            fn $test_name() {
+                let (vreg, vmem, addr, enc, sreg, rreg, rmem) = $test_values;
+                let source = if sreg { RegNames::R1 } else { RegNames::R2 };
+
+                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+                cpu.set_encoding(enc);
+
+                cpu.set_register(RegNames::R0, addr);
+                cpu.set_register(source, vreg);
+
+                let address = addr as u32 as usize & 0xFFFFFFFC;
+                cpu.memory.splice(address..address+4, vmem);
+
+                cpu.$function(RegNames::R0, RegNames::R1, source);
+
+                assert_eq!(rreg, cpu.get_register_intern(RegNames::R1));
+                let bytes = &cpu.memory[address..address+4];
+                assert_eq!(rmem, bytes);  
+            }
+        )*}
+    }
+
+    // found fault: swp did rotate value 8 * bits[0:1] (fixed)
+    swap_tests! {
+        function: swp,
+        swp_test_1: 
+            (7342274, [1,7,6,2], 0x38, Endian::Big, F, 17237506, [0,112,8,194]),
+        swp_test_2: 
+            (98125, [15,23,5,0], 0x4C, Endian::Little, T, 333583, [77,127,1,0]),
+        swp_test_3: 
+            (175325, [3,5,1,3], 0xA2, Endian::Big, T, 16974597, [0,2,172,221])
+    }
+
+    swap_tests! {
+        function: swpb,
+        swpb_test_1: 
+            (7342274, [182,7,6,2], 0x38, Endian::Big, F, 182, [194,7,6,2]),
+        swpb_test_2: 
+            (98125, [15,23,5,0], 0x4C, Endian::Little, T, 15, [77,23,5,0]),
+        swpb_test_3: 
+            (175325, [3,5,1,3], 0xA2, Endian::Big, T, 1, [3,5,221,3])
+    }
 }
