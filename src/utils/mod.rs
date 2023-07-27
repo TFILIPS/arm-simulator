@@ -129,3 +129,17 @@ impl ExitBehaviour for ConsoleExit {
         exit(code);
     }
 }
+
+pub struct MemoryException {
+    pub address: usize, pub size: usize, pub msg: String
+}
+
+pub trait Memory {
+    fn get_memory(
+        &self, address: u32, size: u32
+    ) -> Result<&[u8], MemoryException>;
+
+    fn set_memory(
+        &mut self, address: u32, bytes: &[u8]
+    ) -> Result<(), MemoryException>;
+}

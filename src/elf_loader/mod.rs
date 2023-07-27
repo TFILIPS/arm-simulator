@@ -4,7 +4,7 @@ use headers::{
     ELFHeader, ELFTableEntry, ProgramHeader, 
     SectionHeader, SymbolTableEntry, ValueError
 };
-use crate::{utils::Endian, simulated_cpu::SimulatedCPU};
+use crate::utils::{Endian, Memory};
 
 mod headers;
 
@@ -51,8 +51,8 @@ impl ELFFile {
         Ok(Self{ elf_header, raw_data, encoding })
     }
 
-    pub fn load_cpu_memory<S>(
-        &self, target: &mut dyn SimulatedCPU<S>
+    pub fn load_memory(
+        &self, target: &mut dyn Memory
     ) -> Result<(), String> {
         let headers: Vec<ProgramHeader> = self.read_program_headers()?;
         for header in headers {

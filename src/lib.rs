@@ -44,18 +44,18 @@ impl ARMSimulator {
         self.simulated_cpu.step()
     }
 
+
     fn get_new_cpu(
         elf_file: &ELFFile, stack_pointer: u32
     ) -> Result<Box<dyn SimulatedCPU<i32>>, String> {
 
-        let mut cpu: Box<dyn SimulatedCPU<i32>> = 
-            Box::new(ARMv5CPU::new(ConsoleOutput, ConsoleExit));
+        let mut cpu: ARMv5CPU = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
 
         cpu.set_register(RegNames::PC, elf_file.get_entry_point() as i32);
         cpu.set_register(RegNames::SP, stack_pointer as i32);
         cpu.set_encoding(elf_file.get_encoding());
-        elf_file.load_cpu_memory::<i32>(&mut *cpu)?;
-        Ok(cpu)
+        elf_file.load_memory(&mut cpu)?;
+        Ok(Box::new(cpu))
     }
 }
 

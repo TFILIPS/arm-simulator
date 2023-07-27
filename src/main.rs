@@ -14,12 +14,11 @@ fn main() {
     let elf_file: ELFFile = ELFFile::load(&path).unwrap_or_else(print_and_exit);
     elf_file.check_header_values().unwrap_or_else(print_and_exit);
     
-    let mut cpu: Box<dyn SimulatedCPU<i32>> = 
-        Box::new(ARMv5CPU::new(ConsoleOutput, ConsoleExit));
+    let mut cpu: ARMv5CPU = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
     cpu.set_register(RegNames::PC, elf_file.get_entry_point() as i32);
-    cpu.set_register(RegNames::SP, 0x4000);
+    cpu.set_register(RegNames::SP, 0x400000);
     cpu.set_encoding(elf_file.get_encoding());
-    elf_file.load_cpu_memory::<i32>(&mut *cpu).unwrap_or_else(print_and_exit);
+    elf_file.load_memory(&mut cpu).unwrap_or_else(print_and_exit);
 
     if disassemble {
         let (text_start, text_end): (u32, u32) = 

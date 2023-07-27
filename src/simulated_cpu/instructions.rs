@@ -5,7 +5,7 @@ use super::{
     operands::{ShifterOperand, AddressingMode, AddressingModeMultiple}, SimulationExceptionKind
 };
 use crate::utils::{
-    slice_to_u32, BitAccess, slice_to_u16, u32_to_array, u16_to_array
+    slice_to_u32, BitAccess, slice_to_u16, u32_to_array, u16_to_array, Memory
 };
 
 pub trait Instruction<C: SimulatedCPU<S> , S>: Display {
@@ -846,7 +846,8 @@ impl ARMv5CPU {
         let value: u32 = self.get_register_intern(rd) as u32;
         let bytes: [u8; 4] = u32_to_array(value, &self.encoding);
 
-        self.set_memory(address, &bytes)
+        self.set_memory(address, &bytes)?;
+        Ok(())
     }
 
     fn strb(&mut self, rd: RegNames, am: AddressingMode) -> Result<(), SimulationException> {
@@ -854,7 +855,8 @@ impl ARMv5CPU {
         let value: u8 = self.get_register_intern(rd) as u8;
 
         //self.memory[address] = value;
-        self.set_memory(address, &[value])
+        self.set_memory(address, &[value])?;
+        Ok(())
     }
 
     fn strbt(&mut self, rd: RegNames, am: AddressingMode) -> Result<(), SimulationException> { 
@@ -868,7 +870,8 @@ impl ARMv5CPU {
         let bytes: [u8; 2] = u16_to_array(value, &self.encoding);
         
         //self.memory.splice(address..address+2, bytes);
-        self.set_memory(address, &bytes)
+        self.set_memory(address, &bytes)?;
+        Ok(())
     }
 
     fn strt(&mut self, rd: RegNames, am: AddressingMode) -> Result<(), SimulationException> { 
@@ -906,7 +909,7 @@ impl ARMv5CPU {
     fn stm(&mut self, amm: AddressingModeMultiple) -> Result<(), SimulationException> {
         let mut addresses: StepBy<Range<u32>> = 
             self.compute_modify_address_multiple(&amm);
-
+            
         for i in 0..16 {
             if amm.register_list.get_bit(i) {
                 let address: u32 = addresses.next().unwrap() & 0xFFFFFFFC;

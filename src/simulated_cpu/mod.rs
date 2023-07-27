@@ -3,7 +3,7 @@ use std::{io::Write, collections::HashMap};
 use names::{RegNames, FlagNames};
 use instruction_decoder::{InstructionDecoder, ARMv5Decoder};
 use instructions::Instruction;
-use crate::utils::{Endian, slice_to_u32, OutputDevice, ExitBehaviour};
+use crate::utils::{Endian, slice_to_u32, OutputDevice, ExitBehaviour, Memory, MemoryException};
 
 pub mod names;
 
@@ -24,19 +24,10 @@ pub trait SimulatedCPU<S> {
     fn set_flag(&mut self, flag: FlagNames, value: bool);
     fn get_flags(&self) -> &[bool];
 
-    fn get_memory(
-        &self, address: u32, size: u32
-    ) -> Result<&[u8], SimulationException>;
-
-    fn set_memory(
-        &mut self, address: u32, bytes: &[u8]
-    ) -> Result<(), SimulationException>;
-
     fn mem_size(&self) -> usize;
     fn set_encoding(&mut self, encoding: Endian);
 }
 
-// improvement: simulate whole status register including T flag
 pub struct ARMv5CPU {
     registers: [i32; 16],
     flags: [bool; 4],
@@ -63,9 +54,10 @@ impl SimulatedCPU<i32> for ARMv5CPU {
                     });
                 }
             },
-            Err(err) => {
+            Err(mem_err) => {
+                let sim_err: SimulationException = mem_err.into();
                 result = Err(SimulationException { 
-                    kind: err.kind, 
+                    kind: sim_err.kind, 
                     msg: format!("Unable to fetch instruction at address 0x{address:X}!\n")
                 });
             }
@@ -132,25 +124,6 @@ impl SimulatedCPU<i32> for ARMv5CPU {
         &self.flags
     }
 
-    fn get_memory(
-        &self, address: u32, size: u32
-    ) -> Result<&[u8], SimulationException> {
-        let (start, end): (usize, usize) = 
-            ARMv5CPU::check_memory_access_get_boundaries(address, size)?;
-
-        Ok(&self.memory[start..end])
-    }
-
-    fn set_memory(
-        &mut self, address: u32, bytes: &[u8]
-    ) -> Result<(), SimulationException> {
-        let size: u32 = bytes.len() as u32;
-        let (start, end): (usize, usize) = 
-            ARMv5CPU::check_memory_access_get_boundaries(address, size)?;
-        self.memory.splice(start..end, bytes.iter().cloned());
-        Ok(())
-    }
-
     fn set_encoding(&mut self, encoding: Endian) {
         self.encoding = encoding;
     }
@@ -159,6 +132,29 @@ impl SimulatedCPU<i32> for ARMv5CPU {
         ARMv5CPU::MEMORY_SIZE
     }
 }
+
+impl Memory for ARMv5CPU {
+    fn get_memory(
+        &self, address: u32, size: u32
+    ) -> Result<&[u8], MemoryException> {
+        let (start, end): (usize, usize) = 
+            ARMv5CPU::check_memory_access_get_boundaries(address, size)?;
+
+        Ok(&self.memory[start..end])
+    }
+
+    fn set_memory(
+        &mut self, address: u32, bytes: &[u8]
+    ) -> Result<(), MemoryException> {
+        let size: u32 = bytes.len() as u32;
+        let (start, end): (usize, usize) = 
+            ARMv5CPU::check_memory_access_get_boundaries(address, size)?;
+        self.memory.splice(start..end, bytes.iter().cloned());
+        Ok(())
+    }
+}
+
+
 impl ARMv5CPU {
     const MEMORY_SIZE: usize = 2usize.pow(26);
 
@@ -185,7 +181,7 @@ impl ARMv5CPU {
 
     fn check_memory_access_get_boundaries(
         address: u32, size: u32
-    ) -> Result<(usize, usize), SimulationException> {
+    ) -> Result<(usize, usize), MemoryException> {
         let start: usize = address as usize;
         if let Some(end) = address.checked_add(size) {
             let end: usize = end as usize;
@@ -193,10 +189,9 @@ impl ARMv5CPU {
                 return Ok((start, end));
             }
         }
-        Err(SimulationException{
-            kind: SimulationExceptionKind::DataAbort {
-                memory_address: address as usize, size: size as usize
-            }, 
+        Err(MemoryException { 
+            address: address as usize, 
+            size: size as usize,
             msg: "Memory access out of bounds!".to_string()
         })
     }
@@ -210,4 +205,16 @@ pub struct SimulationException { kind: SimulationExceptionKind, msg: String }
 pub enum SimulationExceptionKind {
     DataAbort{memory_address: usize, size: usize}, 
     UnsupportedInstruction, UndefinedInstruction
+}
+
+impl From<MemoryException> for SimulationException {
+    fn from(value: MemoryException) -> Self {
+        SimulationException { 
+            kind: SimulationExceptionKind::DataAbort { 
+                memory_address: value.address, 
+                size: value.size 
+            },
+            msg: value.msg
+        }
+    }
 }
