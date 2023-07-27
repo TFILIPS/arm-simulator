@@ -24,7 +24,6 @@ pub trait SimulatedCPU<S> {
     fn set_flag(&mut self, flag: FlagNames, value: bool);
     fn get_flags(&self) -> &[bool];
 
-    fn mem_size(&self) -> usize;
     fn set_encoding(&mut self, encoding: Endian);
 }
 
@@ -126,10 +125,6 @@ impl SimulatedCPU<i32> for ARMv5CPU {
 
     fn set_encoding(&mut self, encoding: Endian) {
         self.encoding = encoding;
-    }
-
-    fn mem_size(&self) -> usize {
-        ARMv5CPU::MEMORY_SIZE
     }
 }
 

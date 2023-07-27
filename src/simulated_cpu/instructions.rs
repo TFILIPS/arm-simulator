@@ -2,13 +2,14 @@ use std::{ops::Range, iter::StepBy, fmt::Display, mem::transmute};
 
 use super::{
     SimulatedCPU, ARMv5CPU, names::{RegNames, FlagNames}, SimulationException,
-    operands::{ShifterOperand, AddressingMode, AddressingModeMultiple}, SimulationExceptionKind
+    operands::{ShifterOperand, AddressingMode, AddressingModeMultiple}, 
+    SimulationExceptionKind
 };
 use crate::utils::{
     slice_to_u32, BitAccess, slice_to_u16, u32_to_array, u16_to_array, Memory
 };
 
-pub trait Instruction<C: SimulatedCPU<S> , S>: Display {
+pub trait Instruction<C: SimulatedCPU<S>, S>: Display {
     fn execute(&self, cpu: &mut C) -> Result<(), SimulationException>;
 }
 
@@ -55,7 +56,7 @@ impl Display for Condition {
             write!(f, "")
         }
         else {
-            write!(f, "{:?}", self)   
+            write!(f, "{self:?}")   
         }
     }
 }
