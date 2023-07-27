@@ -124,7 +124,7 @@ impl ARMv5CPU {
         }
     }
 
-    pub fn compute_modify_address(&mut self, am: AddressingMode) -> usize {
+    pub fn compute_modify_address(&mut self, am: AddressingMode) -> u32 {
         let offset: u32 = match am.offset_type {
             OffsetType::Immediate { offset } => {
                 offset as u32
@@ -158,22 +158,22 @@ impl ARMv5CPU {
             address = self.get_register_intern(am.rn) as u32;
             self.set_register(am.rn, op(address, offset) as i32);
         }
-        address as usize
+        address
     }
 
     pub fn compute_modify_address_multiple(
         &mut self, amm: &AddressingModeMultiple
-    ) -> StepBy<Range<usize>> {
-        let base_address: usize = self.get_register_intern(amm.rn) as usize;
+    ) -> StepBy<Range<u32>> {
+        let base_address: u32 = self.get_register_intern(amm.rn) as u32;
         
-        let op = if amm.u {usize::wrapping_add} else {usize::wrapping_sub};
+        let op = if amm.u {u32::wrapping_add} else {u32::wrapping_sub};
         let num_regs: u32 = amm.register_list.count_ones();
-        let new_address = op(base_address, (num_regs * 4) as usize);
+        let new_address: u32 = op(base_address, num_regs * 4);
         if amm.w {
             self.set_register(amm.rn, new_address as i32);
         }
 
-        let mut range: Range<usize> = if amm.u {
+        let mut range: Range<u32> = if amm.u {
             base_address..new_address
         } 
         else {

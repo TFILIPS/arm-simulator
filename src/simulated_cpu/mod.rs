@@ -11,13 +11,10 @@ mod instructions;
 mod operands;
 mod instruction_decoder;
 
-pub const MEMORY_SIZE: usize = 2usize.pow(26);
-
 pub trait SimulatedCPU<S> {
-    fn step(&mut self);
+    fn step(&mut self) -> Result<(), SimulationException>;
     fn disassemble_memory(
-        &self, start: u32, end: u32, 
-        labels: Vec<(u32, String)>
+        &self, start: u32, end: u32, labels: Vec<(u32, String)>
     ) -> String;
 
     fn get_register(&self, register: RegNames) -> S;
@@ -26,7 +23,16 @@ pub trait SimulatedCPU<S> {
     fn get_flag(&self, flag: FlagNames) -> bool;
     fn set_flag(&mut self, flag: FlagNames, value: bool);
     fn get_flags(&self) -> &[bool];
-    fn get_memory(&mut self) -> &mut Vec<u8>;
+
+    fn get_memory(
+        &self, address: u32, size: u32
+    ) -> Result<&[u8], SimulationException>;
+
+    fn set_memory(
+        &mut self, address: u32, bytes: &[u8]
+    ) -> Result<(), SimulationException>;
+
+    fn mem_size(&self) -> usize;
     fn set_encoding(&mut self, encoding: Endian);
 }
 
@@ -40,22 +46,43 @@ pub struct ARMv5CPU {
     exit_behaviour: Box<dyn ExitBehaviour>
 }
 impl SimulatedCPU<i32> for ARMv5CPU {
-    fn step(&mut self) {
-        let pc_value: i32 = self.registers[RegNames::PC];
-        let address: usize = pc_value as u32 as usize;
+    fn step(&mut self) -> Result<(), SimulationException> {
+        let address: u32 = self.registers[RegNames::PC] as u32;
+        let mut result: Result<(), SimulationException> = Ok(());
 
-        let bytes: &[u8] = &self.memory[address..address+4];
-        let bits: u32 = slice_to_u32(&bytes, &self.encoding);
+        match self.get_memory(address, 4) {
+            Ok(bytes) => {
+                let bits: u32 = slice_to_u32(&bytes, &self.encoding);
+                let instruction: Box<dyn Instruction<ARMv5CPU, i32>> = 
+                    Box::new(ARMv5Decoder::decode(bits));
+                if let Err(err) = instruction.execute(self) {
+                    result = Err(SimulationException { 
+                        kind: err.kind, 
+                        msg: format!(
+                            "Exception caused by instruction at 0x{address:X}: {}\n", err.msg)
+                    });
+                }
+            },
+            Err(err) => {
+                result = Err(SimulationException { 
+                    kind: err.kind, 
+                    msg: format!("Unable to fetch instruction at address 0x{address:X}!\n")
+                });
+            }
+        }
 
-        let instruction: Box<dyn Instruction<ARMv5CPU, i32>> = 
-            Box::new(ARMv5Decoder::decode(bits));
-        instruction.execute(self);
-
+        if let Err(err) = &result {
+            self.output_device.output_err(&err.msg);
+            self.exit_behaviour.exit(-1);
+        }
+        
         //only increase programcounter if it was not changed by the instruction
-        if pc_value == self.registers[RegNames::PC] {
+        if address == (self.registers[RegNames::PC] as u32) {
             self.registers[RegNames::PC] = 
                 self.registers[RegNames::PC].wrapping_add(4);
         }
+
+        result
     }
 
     fn disassemble_memory(
@@ -105,21 +132,42 @@ impl SimulatedCPU<i32> for ARMv5CPU {
         &self.flags
     }
 
-    fn get_memory(&mut self) -> &mut Vec<u8> {
-        &mut self.memory
+    fn get_memory(
+        &self, address: u32, size: u32
+    ) -> Result<&[u8], SimulationException> {
+        let (start, end): (usize, usize) = 
+            ARMv5CPU::check_memory_access_get_boundaries(address, size)?;
+
+        Ok(&self.memory[start..end])
+    }
+
+    fn set_memory(
+        &mut self, address: u32, bytes: &[u8]
+    ) -> Result<(), SimulationException> {
+        let size: u32 = bytes.len() as u32;
+        let (start, end): (usize, usize) = 
+            ARMv5CPU::check_memory_access_get_boundaries(address, size)?;
+        self.memory.splice(start..end, bytes.iter().cloned());
+        Ok(())
     }
 
     fn set_encoding(&mut self, encoding: Endian) {
         self.encoding = encoding;
     }
+
+    fn mem_size(&self) -> usize {
+        ARMv5CPU::MEMORY_SIZE
+    }
 }
 impl ARMv5CPU {
+    const MEMORY_SIZE: usize = 2usize.pow(26);
+
     pub fn new<O, E>(output_device: O, exit_behaviour: E) -> Self 
     where O: OutputDevice + 'static, E: ExitBehaviour + 'static {
         Self {
             registers: [0i32; 16],
             flags: [false; 4],
-            memory: vec![0u8; MEMORY_SIZE],
+            memory: vec![0u8; ARMv5CPU::MEMORY_SIZE],
             encoding: Endian::Little,
             output_device: Box::new(output_device),
             exit_behaviour: Box::new(exit_behaviour)
@@ -134,4 +182,32 @@ impl ARMv5CPU {
             self.registers[register] 
         }
     }
+
+    fn check_memory_access_get_boundaries(
+        address: u32, size: u32
+    ) -> Result<(usize, usize), SimulationException> {
+        let start: usize = address as usize;
+        if let Some(end) = address.checked_add(size) {
+            let end: usize = end as usize;
+            if end < ARMv5CPU::MEMORY_SIZE {
+                return Ok((start, end));
+            }
+        }
+        Err(SimulationException{
+            kind: SimulationExceptionKind::DataAbort {
+                memory_address: address as usize, size: size as usize
+            }, 
+            msg: "Memory access out of bounds!".to_string()
+        })
+    }
+}
+
+#[derive(Debug)]
+#[allow(dead_code)]
+pub struct SimulationException { kind: SimulationExceptionKind, msg: String }
+
+#[derive(Debug)]
+pub enum SimulationExceptionKind {
+    DataAbort{memory_address: usize, size: usize}, 
+    UnsupportedInstruction, UndefinedInstruction
 }

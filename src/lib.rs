@@ -1,7 +1,7 @@
 use wasm_bindgen::prelude::*;
 
 use elf_loader::ELFFile;
-use simulated_cpu::{SimulatedCPU, ARMv5CPU, names::RegNames};
+use simulated_cpu::{SimulatedCPU, ARMv5CPU, names::RegNames, SimulationException};
 
 #[cfg(not(target_family = "wasm"))]
 use utils::{ConsoleOutput, ConsoleExit, OutputDevice, ExitBehaviour};
@@ -40,8 +40,8 @@ impl ARMSimulator {
         Ok(())
     }
 
-    pub fn step(&mut self) {
-        self.simulated_cpu.step();
+    pub fn step(&mut self) -> Result<(), SimulationException> {
+        self.simulated_cpu.step()
     }
 
     fn get_new_cpu(
@@ -54,7 +54,7 @@ impl ARMSimulator {
         cpu.set_register(RegNames::PC, elf_file.get_entry_point() as i32);
         cpu.set_register(RegNames::SP, stack_pointer as i32);
         cpu.set_encoding(elf_file.get_encoding());
-        elf_file.load_memory(cpu.get_memory())?;
+        elf_file.load_cpu_memory::<i32>(&mut *cpu)?;
         Ok(cpu)
     }
 }
@@ -109,6 +109,14 @@ impl ARMSimulator {
         elf_file.load_memory(cpu.get_memory())?;
         Ok(cpu)
     }
+
+    pub fn multiple_steps(&mut self, n: usize) { 
+        for _ in 0..n {
+            if let Err(_) = self.simulated_cpu.step() {
+                return;
+            }
+        }
+    }
 }
 
 #[wasm_bindgen]
@@ -125,12 +133,6 @@ impl ARMSimulator {
 
     pub fn get_program_counter(&self) -> u32 { 
         self.simulated_cpu.get_register(RegNames::PC) as u32
-    }
-
-    pub fn multiple_steps(&mut self, n: usize) { 
-        for _ in 0..n {
-            self.simulated_cpu.step();
-        }
     }
 }
 
@@ -192,259 +194,3 @@ impl ExitBehaviour for WebExit {
             .expect("Error while trying to execute js function stop!");
     }
 }
-
-
-
-/*use elf_loader::ELFFile;
-use simulated_cpu::{SimulatedCPU, ARMv5CPU, names::RegNames};
-use utils::{OutputDevice, ExitBehaviour, ConsoleOutput, ConsoleExit};
-
-mod elf_loader;
-mod simulated_cpu;
-mod utils;
-
-static mut ELF_FILE: Option<ELFFile> = None;
-static mut CPU: Option<Box<dyn SimulatedCPU<i32>>> = None;
-
-static mut PLATFORM: Platform = Platform::Default;
-
-enum Platform { 
-    Default, 
-    Web {
-        print: js_sys::Function, 
-        print_err: js_sys::Function,
-        stop: js_sys::Function,
-        update: js_sys::Function
-    },
-    Test
-}
-
-#[wasm_bindgen]
-pub unsafe fn change_platfrom_to_web(
-    print: js_sys::Function, print_err: js_sys::Function, 
-    stop: js_sys::Function, update: js_sys::Function
-) { 
-    PLATFORM = Platform::Web { print, print_err, stop, update } 
-}
-
-#[wasm_bindgen]
-pub unsafe fn load_elf_file(bytes: &[u8]) -> Result<(), String> {
-    ELF_FILE = None;
-
-    let bytes: Vec<u8> = Vec::from(bytes);
-    match ELFFile::load_raw(bytes) {
-        Ok(elf_file) => {
-            match elf_file.check_header_values() {
-                Ok(()) => Ok(ELF_FILE = Some(elf_file)),
-                Err(err_msg) => Err(err_msg)
-            }
-        },
-        Err(err_msg) => Err(err_msg)
-    }
-}
-
-#[wasm_bindgen]
-pub unsafe fn init_simulator() -> Result<(), String>{
-    CPU = None;
-
-    if let Some(elf_file) = &ELF_FILE {
-        let mut cpu: Box<dyn SimulatedCPU<i32>> = match &PLATFORM {
-            Platform::Default => {
-                Box::new(ARMv5CPU::new(ConsoleOutput, ConsoleExit))
-            },
-            Platform::Web{print, print_err, stop, ..} => {
-                Box::new(ARMv5CPU::new(
-                    WebOutput { print, print_err }, WebExit { print, stop }
-                ))
-            },
-            Platform::Test => Box::new(ARMv5CPU::new(TestOutput, TestExit))
-        };
-            
-        cpu.set_register(RegNames::PC, elf_file.get_entry_point() as i32);
-        cpu.set_register(RegNames::SP, 0x3_000_000);
-        cpu.set_encoding(elf_file.get_encoding());
-
-        if let Err(err) = elf_file.load_memory(cpu.get_memory()) {
-            Err(err)
-        }
-        else { 
-            CPU = Some(cpu);
-            if let Platform::Web { update, ..} = &PLATFORM {
-                update.call0(&JsValue::NULL).expect(
-                    "Error while trying to execute js function update!");
-            }
-            Ok(()) 
-        }
-    }
-    else { Err(String::from("Need to load elf_file first!")) }
-}
-
-#[wasm_bindgen]
-pub unsafe fn step() -> Result<(), String>{
-    if let Some(cpu) = &mut CPU{
-        cpu.step();
-        if let Platform::Web { update, .. } = &PLATFORM {
-            update.call0(&JsValue::NULL)
-                .expect("Error while trying to execute js function update!");
-        }
-        Ok(())
-    }
-    else { Err(String::from("Need to init cpu first!")) }
-}
-
-#[wasm_bindgen]
-pub unsafe fn get_disassembly() -> Result<String, String> {
-    if let Some(elf) = &ELF_FILE {
-        if let Some(cpu) = &mut CPU{
-            let (text_start, text_end): (u32, u32) = 
-                elf.get_text_section_range().unwrap_or_default();
-    
-            let labels = elf.get_labels().unwrap_or_default();
-            Ok(cpu.disassemble_memory(text_start, text_end, labels))
-        }
-        else { Err(String::from("Need to init cpu first!")) }
-    }
-    else { Err(String::from("Need to load elf_file first!")) }
-}
-
-
-
-#[wasm_bindgen]
-pub unsafe fn get_registers() -> Result<Vec<i32>, String> {
-    if let Some(cpu) = &CPU {
-        Ok(Vec::from(cpu.get_registers()))
-    }
-    else { Err(String::from("Need to init cpu first!")) }
-}
-
-#[wasm_bindgen]
-pub unsafe fn get_program_counter() -> Result<u32, String> { 
-    if let Some(cpu) = &CPU {
-        Ok(cpu.get_register(RegNames::PC) as u32)
-    }
-    else { Err(String::from("Need to init cpu first!")) }
-}
-
-#[no_mangle]
-pub extern "C" fn print_hello() {
-    println!("Hello, world!");
-}
-
-struct WebOutput {
-    print: &'static js_sys::Function,
-    print_err: &'static js_sys::Function
-}
-impl OutputDevice for WebOutput {
-    fn output(&self, msg: &str) {
-        self.print.call1(&JsValue::NULL, &JsValue::from_str(msg))
-            .expect("Error while trying to execute js function print!");
-    }
-    fn output_err(&self, err: &str) {
-        self.print_err.call1(&JsValue::NULL, &JsValue::from_str(err))
-            .expect("Error while trying to execute js function print_err!");
-    }
-}
-
-struct WebExit {
-        print: &'static js_sys::Function, 
-        stop: &'static js_sys::Function 
-}
-impl ExitBehaviour for WebExit {
-    fn exit(&self, code: i32) {
-        let return_str: &str = &format!("\n!> Exit Code: {code}\n\n");
-        self.print.call1(&JsValue::NULL, &JsValue::from_str(return_str))
-            .expect("Error while trying to execute js function print!");
-        self.stop.call0(&JsValue::NULL)
-            .expect("Error while trying to execute js function stop!");
-    }
-}
-
-struct TestOutput;
-impl OutputDevice for TestOutput {
-    fn output(&self, _: &str) { }
-    fn output_err(&self, _: &str) { }
-}
-
-struct TestExit;
-impl ExitBehaviour for TestExit {
-    fn exit(&self, _: i32) { }
-}
-*/
-/* 
-// found better solution
-use pyo3::{prelude::*, exceptions::PyValueError};
-
-
-#[pymodule]
-fn arm_simulator(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(load_elf_file_py, m)?)?;
-    m.add_function(wrap_pyfunction!(init_simulator_py, m)?)?;
-    m.add_function(wrap_pyfunction!(step_py, m)?)?;
-    m.add_function(wrap_pyfunction!(get_disassembly_py, m)?)?;
-    m.add_function(wrap_pyfunction!(get_registers_py, m)?)?;
-    m.add_function(wrap_pyfunction!(set_register_py, m)?)?;
-    m.add_function(wrap_pyfunction!(change_platfrom_to_test, m)?)?;
-    Ok(())
-}
-
-#[pyfunction]
-pub unsafe fn load_elf_file_py(bytes: &[u8]) -> PyResult<()> {
-    match load_elf_file(bytes) {
-        Ok(()) => Ok(()),
-        Err(err_msg) => Err(PyValueError::new_err(err_msg))
-    }
-}
-
-#[pyfunction]
-pub unsafe fn init_simulator_py() -> PyResult<()> {
-    match init_simulator() {
-        Ok(()) => Ok(()),
-        Err(err_msg) => Err(PyValueError::new_err(err_msg))
-    }
-}
-
-#[pyfunction]
-pub unsafe fn step_py() -> PyResult<()> {
-    match step() {
-        Ok(()) => Ok(()),
-        Err(err_msg) => Err(PyValueError::new_err(err_msg))
-    }
-}
-
-#[pyfunction]
-pub unsafe fn get_disassembly_py() -> PyResult<String> {
-    match get_disassembly() {
-        Ok(dissasembly) => Ok(dissasembly),
-        Err(err_msg) => Err(PyValueError::new_err(err_msg))
-    }
-}
-
-#[pyfunction]
-pub unsafe fn get_registers_py() -> PyResult<Vec<i32>> {
-    match get_registers() {
-        Ok(registers) => Ok(registers),
-        Err(err_msg) => Err(PyValueError::new_err(err_msg))
-    }
-}
-
-#[pyfunction]
-pub unsafe fn set_register_py(register: usize, value: u32) -> PyResult<()> {
-    if let Some(cpu) = &mut CPU {
-        Ok(cpu.set_register((register as u32).into(), value as i32))
-    }
-    else { Err(PyValueError::new_err(String::from("Need to init cpu first!"))) }
-}
-
-#[pyfunction]
-pub unsafe fn get_program_counter_py() -> PyResult<u32> {
-    match get_program_counter() {
-        Ok(pc) => Ok(pc),
-        Err(err_msg) => Err(PyValueError::new_err(err_msg))
-    }
-}
-
-#[pyfunction]
-pub unsafe fn change_platfrom_to_test() {
-    PLATFORM = Platform::Test;
-}
-*/

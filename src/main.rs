@@ -19,7 +19,7 @@ fn main() {
     cpu.set_register(RegNames::PC, elf_file.get_entry_point() as i32);
     cpu.set_register(RegNames::SP, 0x4000);
     cpu.set_encoding(elf_file.get_encoding());
-    elf_file.load_memory(cpu.get_memory()).unwrap_or_else(print_and_exit);
+    elf_file.load_cpu_memory::<i32>(&mut *cpu).unwrap_or_else(print_and_exit);
 
     if disassemble {
         let (text_start, text_end): (u32, u32) = 
@@ -28,7 +28,7 @@ fn main() {
             elf_file.get_labels().unwrap_or_else(print_and_exit);
         print!("{}", cpu.disassemble_memory(text_start, text_end, labels));
     }
-    else { loop { cpu.step(); } }
+    else { loop { cpu.step().unwrap() } }
 }
 
 fn parse_arguments() -> (String, bool) {

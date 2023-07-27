@@ -4,7 +4,7 @@ use headers::{
     ELFHeader, ELFTableEntry, ProgramHeader, 
     SectionHeader, SymbolTableEntry, ValueError
 };
-use crate::utils::Endian;
+use crate::{utils::Endian, simulated_cpu::SimulatedCPU};
 
 mod headers;
 
@@ -51,30 +51,35 @@ impl ELFFile {
         Ok(Self{ elf_header, raw_data, encoding })
     }
 
-    pub fn load_memory(&self, memory: &mut Vec<u8>) -> Result<(), String> {
+    pub fn load_cpu_memory<S>(
+        &self, target: &mut dyn SimulatedCPU<S>
+    ) -> Result<(), String> {
         let headers: Vec<ProgramHeader> = self.read_program_headers()?;
         for header in headers {
             if header.program_type != 1 { continue; }
             let file_start: usize = header.offset as usize;
             let file_end: usize = file_start + header.file_size as usize;
-            let mem_start: usize = header.virtual_address as usize;
-            let mem_end: usize = mem_start + header.file_size as usize;
+            let mut address: u32 = header.virtual_address;
 
-            if memory.len() < mem_start + header.memory_size as usize {
-                return Err(String::from("ELF file expects a larger memory!"));
-            }
             if self.raw_data.len() < file_end {
                 return Err(String::from(
                     "Error while loading memory! Check ELF file."
                 ));
             }
 
-            memory[mem_start..mem_end]
-                .copy_from_slice(&self.raw_data[file_start..file_end]);
+            if let Err(_) = target
+                .set_memory(address, &self.raw_data[file_start..file_end]) {
+                return Err(String::from("ELF file expects larger memory!"));
+            }
 
             if header.memory_size > header.file_size {
-                let exp_end: usize = mem_start + header.memory_size as usize;
-                for byte in memory[mem_end..exp_end].iter_mut() { *byte = 0 };
+                let padding: u32 = header.memory_size - header.file_size;
+                address += header.file_size;
+
+                if let Err(_) = target
+                    .set_memory(address, &vec![0; padding as usize]) {
+                    return Err(String::from("ELF file expects larger memory!"));
+                }
             }
         }
         Ok(())
