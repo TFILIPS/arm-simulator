@@ -1,8 +1,8 @@
 use std::{mem::transmute, fmt::Display};
 
 #[repr(u32)]
-#[derive(Debug, Clone, Copy)]
 #[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShiftType { 
     LSL, LSR, ASR, ROR, RRX //RRX is special case of ROR
 } 

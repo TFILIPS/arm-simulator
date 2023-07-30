@@ -10,6 +10,7 @@ pub trait InstructionDecoder<I: Instruction<C, S>, C: SimulatedCPU<S>, S> {
     fn decode(instruction_bits: u32) -> I;
 }
 
+//Todo: refactor condition
 pub struct ARMv5Decoder;
 impl InstructionDecoder<ARMv5Instruction, ARMv5CPU, i32> for ARMv5Decoder {
     fn decode(instruction_bits: u32) -> ARMv5Instruction {
@@ -177,8 +178,7 @@ impl ARMv5Decoder {
         if inst_bits.get_bit(23) || inst_bits.cut_bits(20..=21) != 0 {
             return ARMv5Decoder::UNDEFINED_INSTRUCTION;
         }
-
-        //maybe combine swp and swpb to one function lets first look at str and ldr        
+    
         let op: ARMv5SynchronizationOperation = if inst_bits.get_bit(22) {
             ARMv5SynchronizationOperation::SWPB
         }
@@ -213,13 +213,15 @@ impl ARMv5Decoder {
         else if op2 == 0b01 { ARMv5LoadStoreOperation::STRH }
         else { return ARMv5Decoder::UNDEFINED_INSTRUCTION };
 
-        let offset_type: OffsetType = if inst_bits.get_bit(24) {
-            OffsetType::Register { rm: inst_bits.cut_bits(0..=3).into() }
+        let offset_type: OffsetType = if inst_bits.get_bit(22) {
+            OffsetType::Immediate { 
+                offset: ((inst_bits.cut_bits(8..=11) << 4) |
+                    inst_bits.cut_bits(0..=3)) as u16
+            }
         }
         else {
-            OffsetType::Immediate { 
-                offset: (inst_bits.cut_bits(8..=11) << 4 
-                    + inst_bits.cut_bits(0..=3)) as u16
+            OffsetType::Register { 
+                rm: inst_bits.cut_bits(0..=3).into()
             }
         };
 
@@ -242,7 +244,6 @@ impl ARMv5Decoder {
     fn load_store(inst_bits: u32) -> ARMv5Instruction {
         let offset_type: OffsetType = if inst_bits.get_bit(25) {
             if inst_bits.get_bit(4) {
-                //media instructions
                 return ARMv5Decoder::UNDEFINED_INSTRUCTION;
             }
             OffsetType::ScaledRegister { 
@@ -317,9 +318,8 @@ impl ARMv5Decoder {
     }
 
     fn copro_and_swi(inst_bits: u32) -> ARMv5Instruction {
-        //works at the moment, need to be expanded for cop calls
+        let condition: Condition = Condition::from_instruction(inst_bits);
         if inst_bits.cut_bits(24..=25) == 0b11 {
-            let condition: Condition = Condition::from_instruction(inst_bits);
             ARMv5Instruction { 
                 condition, 
                 instruction_type: ARMv5InstructionType::Generic { 
@@ -327,10 +327,899 @@ impl ARMv5Decoder {
                 }
             }
         }
-        else { return ARMv5Decoder::UNDEFINED_INSTRUCTION;  }
+        else if !bm(inst_bits.cut_bits(8..=11), 0b1110, 0x1010) {
+            let op1 = inst_bits.cut_bits(20..=25);
+            if bm(op1, 0b100001, 0) && !bm(op1, 0b111011, 0) {
+                ARMv5Instruction { 
+                    condition, 
+                    instruction_type: ARMv5InstructionType::Generic { 
+                        op: ARMv5GenericOperation::STC
+                    }
+                }
+            }
+            else {
+                ARMv5Decoder::UNDEFINED_INSTRUCTION 
+            }
+        }
+        else { ARMv5Decoder::UNDEFINED_INSTRUCTION  }
     }
 }
 
 fn bm(value: u32, mask: u32, expectation: u32) -> bool {
     (value & mask) ^ expectation == 0
+}
+
+
+#[cfg(test)]
+mod tests {
+    use crate::simulated_cpu::{instructions::{
+        ARMv5Instruction, Condition, ARMv5InstructionType,
+        ARMv5DataProcessingOperation, ARMv5MultiplyOperation, 
+        ARMv5MiscellaneousOperation, ARMv5BranchOperation, 
+        ARMv5LoadStoreOperation, ARMv5LoadStoreMultipleOperation, ARMv5SynchronizationOperation, ARMv5GenericOperation
+    }, names::RegNames, operands::{
+            ShifterOperand, barrel_shifter::ShiftType, AddressingMode, OffsetType, AddressingModeMultiple
+        }
+    };
+
+    use super::{InstructionDecoder, ARMv5Decoder};
+
+    macro_rules! decoder_tests {
+        ($($test_name:ident: $test_values:expr),*) 
+        => {$(
+            #[test]
+            fn $test_name() {
+                let (bits, instruction) = $test_values;
+                let result = ARMv5Decoder::decode(bits);
+
+                assert_eq!(instruction, result);
+            }
+        )*}
+    }
+
+    decoder_tests! {
+        and: (
+            0xB00342A9,
+            ARMv5Instruction {
+                condition: Condition::LT,
+                instruction_type: ARMv5InstructionType::DataProcessing {
+                    op: ARMv5DataProcessingOperation::AND,
+                    s: false,
+                    rd: RegNames::R4,
+                    rn: RegNames::R3,
+                    so: ShifterOperand::ImmediateShift {
+                        rm: RegNames::R9,
+                        shift: ShiftType::LSR,
+                        shift_amount: 5
+                    }
+                }
+            }
+        ),
+        eor: (
+            0xd02a0557,
+            ARMv5Instruction {
+                condition: Condition::LE,
+                instruction_type: ARMv5InstructionType::DataProcessing {
+                    op: ARMv5DataProcessingOperation::EOR,
+                    s: false,
+                    rd: RegNames::R0,
+                    rn: RegNames::R10,
+                    so: ShifterOperand::RegisterShift {
+                        rm: RegNames::R7,
+                        shift: ShiftType::ASR,
+                        rs: RegNames::R5
+                    }
+                }
+            }
+        ),
+        sub: (
+            0xe058f003,
+            ARMv5Instruction {
+                condition: Condition::AL,
+                instruction_type: ARMv5InstructionType::DataProcessing {
+                    op: ARMv5DataProcessingOperation::SUB,
+                    s: true,
+                    rd: RegNames::PC,
+                    rn: RegNames::R8,
+                    so: ShifterOperand::ImmediateShift {
+                        rm: RegNames::R3,
+                        shift: ShiftType::LSL,
+                        shift_amount: 0
+                    }
+                }
+            }
+        ),
+        rsb: (
+            0xc0697004,
+            ARMv5Instruction {
+                condition: Condition::GT,
+                instruction_type: ARMv5InstructionType::DataProcessing {
+                    op: ARMv5DataProcessingOperation::RSB,
+                    s: false,
+                    rd: RegNames::R7,
+                    rn: RegNames::R9,
+                    so: ShifterOperand::ImmediateShift {
+                        rm: RegNames::R4,
+                        shift: ShiftType::LSL,
+                        shift_amount: 0
+                    }
+                }
+            }
+        ),
+        add: (
+            0xe08da465,
+            ARMv5Instruction {
+                condition: Condition::AL,
+                instruction_type: ARMv5InstructionType::DataProcessing {
+                    op: ARMv5DataProcessingOperation::ADD,
+                    s: false,
+                    rd: RegNames::R10,
+                    rn: RegNames::SP,
+                    so: ShifterOperand::ImmediateShift {
+                        rm: RegNames::R5,
+                        shift: ShiftType::ROR,
+                        shift_amount: 8
+                    }
+                }
+            }
+        ),
+        adc: (
+            0x50a32f8f,
+            ARMv5Instruction {
+                condition: Condition::PL,
+                instruction_type: ARMv5InstructionType::DataProcessing {
+                    op: ARMv5DataProcessingOperation::ADC,
+                    s: false,
+                    rd: RegNames::R2,
+                    rn: RegNames::R3,
+                    so: ShifterOperand::ImmediateShift {
+                        rm: RegNames::PC,
+                        shift: ShiftType::LSL,
+                        shift_amount: 31
+                    }
+                }
+            }
+        ),
+        sbc: (
+            0xb2d260ba,
+            ARMv5Instruction {
+                condition: Condition::LT,
+                instruction_type: ARMv5InstructionType::DataProcessing {
+                    op: ARMv5DataProcessingOperation::SBC,
+                    s: true,
+                    rd: RegNames::R6,
+                    rn: RegNames::R2,
+                    so: ShifterOperand::Immediate { 
+                        immediate: 186, rotate: 0
+                    }
+                }
+            }
+        ),
+        rsc: (
+            0x40e4900a,
+            ARMv5Instruction {
+                condition: Condition::MI,
+                instruction_type: ARMv5InstructionType::DataProcessing {
+                    op: ARMv5DataProcessingOperation::RSC,
+                    s: false,
+                    rd: RegNames::R9,
+                    rn: RegNames::R4,
+                    so: ShifterOperand::ImmediateShift {
+                        rm: RegNames::R10,
+                        shift: ShiftType::LSL,
+                        shift_amount: 0
+                    }
+                }
+            }
+        ),
+        tst: (
+            0xe1120116,
+            ARMv5Instruction {
+                condition: Condition::AL,
+                instruction_type: ARMv5InstructionType::DataProcessing {
+                    op: ARMv5DataProcessingOperation::TST,
+                    s: true,
+                    rd: RegNames::R0,
+                    rn: RegNames::R2,
+                    so: ShifterOperand::RegisterShift {
+                        rm: RegNames::R6,
+                        shift: ShiftType::LSL,
+                        rs: RegNames::R1
+                    }
+                }
+            }
+        ),
+        teq: (
+            0xe3340415,
+            ARMv5Instruction {
+                condition: Condition::AL,
+                instruction_type: ARMv5InstructionType::DataProcessing {
+                    op: ARMv5DataProcessingOperation::TEQ,
+                    s: true,
+                    rd: RegNames::R0,
+                    rn: RegNames::R4,
+                    so: ShifterOperand::Immediate { 
+                        immediate: 21, rotate: 4
+                    }
+                }
+            }
+        ),
+        cmp: (
+            0xe15c000c,
+            ARMv5Instruction {
+                condition: Condition::AL,
+                instruction_type: ARMv5InstructionType::DataProcessing {
+                    op: ARMv5DataProcessingOperation::CMP,
+                    s: true,
+                    rd: RegNames::R0,
+                    rn: RegNames::R12,
+                    so: ShifterOperand::ImmediateShift {
+                        rm: RegNames::R12,
+                        shift: ShiftType::LSL,
+                        shift_amount: 0
+                    }
+                }
+            }
+        ),
+        cmn: (
+            0xa1750b77,
+            ARMv5Instruction {
+                condition: Condition::GE,
+                instruction_type: ARMv5InstructionType::DataProcessing {
+                    op: ARMv5DataProcessingOperation::CMN,
+                    s: true,
+                    rd: RegNames::R0,
+                    rn: RegNames::R5,
+                    so: ShifterOperand::RegisterShift {
+                        rm: RegNames::R7,
+                        shift: ShiftType::ROR,
+                        rs: RegNames::R11
+                    }
+                }
+            }
+        ),
+        orr: (
+            0x119ec002,
+            ARMv5Instruction {
+                condition: Condition::NE,
+                instruction_type: ARMv5InstructionType::DataProcessing {
+                    op: ARMv5DataProcessingOperation::ORR,
+                    s: true,
+                    rd: RegNames::R12,
+                    rn: RegNames::LR,
+                    so: ShifterOperand::ImmediateShift {
+                        rm: RegNames::R2,
+                        shift: ShiftType::LSL,
+                        shift_amount: 0
+                    }
+                }
+            }
+        ),
+        mov: (
+            0xe1a0b008,
+            ARMv5Instruction {
+                condition: Condition::AL,
+                instruction_type: ARMv5InstructionType::DataProcessing {
+                    op: ARMv5DataProcessingOperation::MOV,
+                    s: false,
+                    rd: RegNames::R11,
+                    rn: RegNames::R0,
+                    so: ShifterOperand::ImmediateShift {
+                        rm: RegNames::R8,
+                        shift: ShiftType::LSL,
+                        shift_amount: 0
+                    }
+                }
+            }
+        ),
+        bic: (
+            0x01dce065,
+            ARMv5Instruction {
+                condition: Condition::EQ,
+                instruction_type: ARMv5InstructionType::DataProcessing {
+                    op: ARMv5DataProcessingOperation::BIC,
+                    s: true,
+                    rd: RegNames::LR,
+                    rn: RegNames::R12,
+                    so: ShifterOperand::ImmediateShift {
+                        rm: RegNames::R5,
+                        shift: ShiftType::ROR,
+                        shift_amount: 0
+                    }
+                }
+            }
+        ),
+        mvn: (
+            0x73e0be57,
+            ARMv5Instruction {
+                condition: Condition::VC,
+                instruction_type: ARMv5InstructionType::DataProcessing {
+                    op: ARMv5DataProcessingOperation::MVN,
+                    s: false,
+                    rd: RegNames::R11,
+                    rn: RegNames::R0,
+                    so: ShifterOperand::Immediate { 
+                        immediate: 87, rotate: 14
+                    }
+                }
+            }
+        ),
+
+        mul: (
+            0x20000d97,
+            ARMv5Instruction {
+                condition: Condition::HS,
+                instruction_type: ARMv5InstructionType::Multiply { 
+                    op: ARMv5MultiplyOperation::MUL,
+                    s: false,
+                    rn_lo: RegNames::R0,
+                    rd_hi: RegNames::R0,
+                    rm: RegNames::R7,
+                    rs: RegNames::SP
+                }
+            }
+        ),
+        mla: (
+            0xe0329691,
+            ARMv5Instruction {
+                condition: Condition::AL,
+                instruction_type: ARMv5InstructionType::Multiply { 
+                    op: ARMv5MultiplyOperation::MLA,
+                    s: true,
+                    rn_lo: RegNames::R9,
+                    rd_hi: RegNames::R2,
+                    rm: RegNames::R1,
+                    rs: RegNames::R6
+                }
+            }
+        ),
+        smull: (
+            0x60ccd092,
+            ARMv5Instruction {
+                condition: Condition::VS,
+                instruction_type: ARMv5InstructionType::Multiply { 
+                    op: ARMv5MultiplyOperation::SMULL,
+                    s: false,
+                    rn_lo: RegNames::SP,
+                    rd_hi: RegNames::R12,
+                    rm: RegNames::R2,
+                    rs: RegNames::R0
+                }
+            }
+        ),
+        umull: (
+            0x80997a90,
+            ARMv5Instruction {
+                condition: Condition::HI,
+                instruction_type: ARMv5InstructionType::Multiply { 
+                    op: ARMv5MultiplyOperation::UMULL,
+                    s: true,
+                    rn_lo: RegNames::R7,
+                    rd_hi: RegNames::R9,
+                    rm: RegNames::R0,
+                    rs: RegNames::R10
+                }
+            }
+        ),
+        smlal: (
+            0xe0ea4c91,
+            ARMv5Instruction {
+                condition: Condition::AL,
+                instruction_type: ARMv5InstructionType::Multiply { 
+                    op: ARMv5MultiplyOperation::SMLAL,
+                    s: false,
+                    rn_lo: RegNames::R4,
+                    rd_hi: RegNames::R10,
+                    rm: RegNames::R1,
+                    rs: RegNames::R12
+                }
+            }
+        ),
+        umlal: (
+            0x40a8e29b,
+            ARMv5Instruction {
+                condition: Condition::MI,
+                instruction_type: ARMv5InstructionType::Multiply { 
+                    op: ARMv5MultiplyOperation::UMLAL,
+                    s: false,
+                    rn_lo: RegNames::LR,
+                    rd_hi: RegNames::R8,
+                    rm: RegNames::R11,
+                    rs: RegNames::R2
+                }
+            }
+        ),
+
+        clz: (
+            0x616fcf13,
+            ARMv5Instruction {
+                condition: Condition::VS,
+                instruction_type: ARMv5InstructionType::Miscellaneous {
+                    op: ARMv5MiscellaneousOperation::CLZ,
+                    rd: RegNames::R12,
+                    rm: RegNames::R3
+                }
+            }
+        ),
+
+
+        b: (
+            0x9a0241c0,
+            ARMv5Instruction {
+                condition: Condition::LS,
+                instruction_type: ARMv5InstructionType::Branch { 
+                    op: ARMv5BranchOperation::B,
+                    si: 147904, 
+                    rm: RegNames::R0
+                }
+            }
+        ),
+        bl: (
+            0xeb2ad361,
+            ARMv5Instruction {
+                condition: Condition::AL,
+                instruction_type: ARMv5InstructionType::Branch { 
+                    op: ARMv5BranchOperation::BL, 
+                    si: 2806625, 
+                    rm: RegNames::R0
+                }
+            }
+        ),
+        bx: (
+            0x812fff15,
+            ARMv5Instruction {
+                condition: Condition::HI,
+                instruction_type: ARMv5InstructionType::Branch { 
+                    op: ARMv5BranchOperation::BX,
+                    si: 0, 
+                    rm: RegNames::R5
+                }
+            }
+        ),
+        //not yet implemented!!!
+        //blx_label: ( 
+        //    0xfa1bc32e,
+        //    ARMv5Instruction {
+        //        condition: Condition::VS,
+        //        instruction_type: ARMv5InstructionType::Branch { 
+        //            op: ARMv5BranchOperation::BLX,
+        //            si: 72081330, 
+        //            rm: RegNames::R0
+        //        }
+        //    }
+        //),
+        blx_register: (
+            0x112fff39,
+            ARMv5Instruction {
+                condition: Condition::NE,
+                instruction_type: ARMv5InstructionType::Branch { 
+                    op: ARMv5BranchOperation::BLX,
+                    si: 0, 
+                    rm: RegNames::R9
+                }
+            }
+        ),
+
+        ldr: (
+            0xa5b3adff,
+            ARMv5Instruction {
+                condition: Condition::GE,
+                instruction_type: ARMv5InstructionType::LoadStore { 
+                    op: ARMv5LoadStoreOperation::LDR, 
+                    rd: RegNames::R10, 
+                    am: AddressingMode { 
+                        p: true, u: true, w: true,
+                        rn: RegNames::R3, 
+                        offset_type: OffsetType::Immediate { 
+                            offset: 03583
+                        }
+                    }
+                }
+            }
+        ),
+        ldrb: (
+            0xe6d75fe1,
+            ARMv5Instruction {
+                condition: Condition::AL,
+                instruction_type: ARMv5InstructionType::LoadStore { 
+                    op: ARMv5LoadStoreOperation::LDRB, 
+                    rd: RegNames::R5, 
+                    am: AddressingMode { 
+                        p: false, u: true, w: false, 
+                        rn: RegNames::R7, 
+                        offset_type: OffsetType::ScaledRegister {
+                            rm: RegNames::R1,
+                            shift: ShiftType::ROR,
+                            shift_imm: 31 
+                        }
+                    }
+                }
+            }
+        ),
+        ldrbt: (
+            0xa6f4e00e,
+            ARMv5Instruction {
+                condition: Condition::GE,
+                instruction_type: ARMv5InstructionType::LoadStore { 
+                    op: ARMv5LoadStoreOperation::LDRBT, 
+                    rd: RegNames::LR, 
+                    am: AddressingMode { 
+                        p: false, u: true, w: true, 
+                        rn: RegNames::R4, 
+                        offset_type: OffsetType::ScaledRegister {
+                            rm: RegNames::LR,
+                            shift: ShiftType::LSL,
+                            shift_imm: 0
+                        }
+                    }
+                }
+            }
+        ),
+        //found misstake decoding register/offset
+        ldrh: (
+            0xe1d5c0b0,
+            ARMv5Instruction {
+                condition: Condition::AL,
+                instruction_type: ARMv5InstructionType::LoadStore { 
+                    op: ARMv5LoadStoreOperation::LDRH, 
+                    rd: RegNames::R12, 
+                    am: AddressingMode { 
+                        p: true, u: true, w: false, 
+                        rn: RegNames::R5, 
+                        offset_type: OffsetType::Immediate { 
+                            offset: 0 
+                        }
+                    }
+                }
+            }
+        ),
+        //found misstake, wrong calc order
+        ldrsb: (
+            0x51db78d1,
+            ARMv5Instruction {
+                condition: Condition::PL,
+                instruction_type: ARMv5InstructionType::LoadStore { 
+                    op: ARMv5LoadStoreOperation::LDRSB, 
+                    rd: RegNames::R7, 
+                    am: AddressingMode { 
+                        p: true, u: true, w: false, 
+                        rn: RegNames::R11, 
+                        offset_type: OffsetType::Immediate { 
+                            offset: 129
+                        }
+                    }
+                }
+            }
+        ),
+        ldrsh: (
+            0x31d630f0,
+            ARMv5Instruction {
+                condition: Condition::LO,
+                instruction_type: ARMv5InstructionType::LoadStore { 
+                    op: ARMv5LoadStoreOperation::LDRSH, 
+                    rd: RegNames::R3, 
+                    am: AddressingMode { 
+                        p: true, u: true, w: false, 
+                        rn: RegNames::R6, 
+                        offset_type: OffsetType::Immediate { 
+                            offset: 0 
+                        }
+                    }
+                }
+            }
+        ),
+        ldrt: (
+            0x143b6008,
+            ARMv5Instruction {
+                condition: Condition::NE,
+                instruction_type: ARMv5InstructionType::LoadStore { 
+                    op: ARMv5LoadStoreOperation::LDRT, 
+                    rd: RegNames::R6, 
+                    am: AddressingMode { 
+                        p: false, u: false, w: true, 
+                        rn: RegNames::R11, 
+                        offset_type: OffsetType::Immediate { 
+                            offset: 8
+                        }
+                    }
+                }
+            }
+        ),
+        str: (
+            0xc78d2065,
+            ARMv5Instruction {
+                condition: Condition::GT,
+                instruction_type: ARMv5InstructionType::LoadStore { 
+                    op: ARMv5LoadStoreOperation::STR, 
+                    rd: RegNames::R2, 
+                    am: AddressingMode { 
+                        p: true, u: true, w: false, 
+                        rn: RegNames::SP, 
+                        offset_type: OffsetType::ScaledRegister { 
+                            rm: RegNames::R5,
+                            shift: ShiftType::ROR,
+                            shift_imm: 0
+                        }
+                    }
+                }
+            }
+        ),
+        strb: (
+            0x57e1022a,
+            ARMv5Instruction {
+                condition: Condition::PL,
+                instruction_type: ARMv5InstructionType::LoadStore { 
+                    op: ARMv5LoadStoreOperation::STRB, 
+                    rd: RegNames::R0, 
+                    am: AddressingMode { 
+                        p: true, u: true, w: true, 
+                        rn: RegNames::R1, 
+                        offset_type: OffsetType::ScaledRegister { 
+                            rm: RegNames::R10,
+                            shift: ShiftType::LSR,
+                            shift_imm: 4
+                        }
+                    }
+                }
+            }
+        ),
+        strbt: (
+            0x36e7b00b,
+            ARMv5Instruction {
+                condition: Condition::LO,
+                instruction_type: ARMv5InstructionType::LoadStore { 
+                    op: ARMv5LoadStoreOperation::STRBT, 
+                    rd: RegNames::R11, 
+                    am: AddressingMode { 
+                        p: false, u: true, w: true, 
+                        rn: RegNames::R7, 
+                        offset_type: OffsetType::ScaledRegister { 
+                            rm: RegNames::R11,
+                            shift: ShiftType::LSL,
+                            shift_imm: 0
+                        }
+                    }
+                }
+            }
+        ),
+        strh: (
+            0x718850b3,
+            ARMv5Instruction {
+                condition: Condition::VC,
+                instruction_type: ARMv5InstructionType::LoadStore { 
+                    op: ARMv5LoadStoreOperation::STRH, 
+                    rd: RegNames::R5, 
+                    am: AddressingMode { 
+                        p: true, u: true, w: false, 
+                        rn: RegNames::R8, 
+                        offset_type: OffsetType::Register { 
+                            rm: RegNames::R3
+                        }
+                    }
+                }
+            }
+        ),
+        strt: (
+            0xa4ac0000,
+            ARMv5Instruction {
+                condition: Condition::GE,
+                instruction_type: ARMv5InstructionType::LoadStore { 
+                    op: ARMv5LoadStoreOperation::STRT, 
+                    rd: RegNames::R0, 
+                    am: AddressingMode { 
+                        p: false, u: true, w: true, 
+                        rn: RegNames::R12, 
+                        offset_type: OffsetType::Immediate { 
+                            offset: 0 
+                        }
+                    }
+                }
+            }
+        ),
+
+        ldm_1: (
+            0x089eb130,
+            ARMv5Instruction {
+                condition: Condition::EQ,
+                instruction_type: ARMv5InstructionType::LoadStoreMultiple { 
+                    op: ARMv5LoadStoreMultipleOperation::LDM,
+                    amm: AddressingModeMultiple { 
+                        p: false, u: true, w: false, 
+                        rn: RegNames::LR, 
+                        register_list: 0b1011000100110000
+                    }
+                }
+            }
+        ),
+        ldm_2: (
+            0xe93a2024,
+            ARMv5Instruction {
+                condition: Condition::AL,
+                instruction_type: ARMv5InstructionType::LoadStoreMultiple { 
+                    op: ARMv5LoadStoreMultipleOperation::LDM,
+                    amm: AddressingModeMultiple { 
+                        p: true, u: false, w: true, 
+                        rn: RegNames::R10, 
+                        register_list: 0b0010000000100100
+                    }
+                }
+            }
+        ),
+        stm_1: (
+            0x99a4d730,
+            ARMv5Instruction {
+                condition: Condition::LS,
+                instruction_type: ARMv5InstructionType::LoadStoreMultiple { 
+                    op: ARMv5LoadStoreMultipleOperation::STM,
+                    amm: AddressingModeMultiple { 
+                        p: true, u: true, w: true, 
+                        rn: RegNames::R4, 
+                        register_list: 0b1101011100110000
+                    }
+                }
+            }
+        ),
+        stm_2: (
+            0xe8070180,
+            ARMv5Instruction {
+                condition: Condition::AL,
+                instruction_type: ARMv5InstructionType::LoadStoreMultiple { 
+                    op: ARMv5LoadStoreMultipleOperation::STM,
+                    amm: AddressingModeMultiple { 
+                        p: false, u: false, w: false, 
+                        rn: RegNames::R7, 
+                        register_list: 0b0000000110000000
+                    }
+                }
+            }
+        ),
+
+        swp: (
+            0xd109e09e,
+            ARMv5Instruction {
+                condition: Condition::LE,
+                instruction_type: ARMv5InstructionType::Synchronization { 
+                    op: ARMv5SynchronizationOperation::SWP, 
+                    rd: RegNames::LR, rm: RegNames::LR, rn: RegNames::R9
+                }
+            }
+        ),
+        swpb: (
+            0x61472091,
+            ARMv5Instruction {
+                condition: Condition::VS,
+                instruction_type: ARMv5InstructionType::Synchronization { 
+                    op: ARMv5SynchronizationOperation::SWPB, 
+                    rd: RegNames::R2, rm: RegNames::R1, rn: RegNames::R7
+                }
+            }
+        ),
+
+        swi: (
+            0x1fdf055e,
+            ARMv5Instruction {
+                condition: Condition::NE,
+                instruction_type: ARMv5InstructionType::Generic { 
+                    op: ARMv5GenericOperation::SWI
+                }
+            }
+        ),
+        bkpt: (
+            0xe12a5373,
+            ARMv5Instruction {
+                condition: Condition::AL,
+                instruction_type: ARMv5InstructionType::Generic { 
+                    op: ARMv5GenericOperation::BKPT
+                }
+            }
+        ),
+        mrs: (
+            0xe10f3000,
+            ARMv5Instruction {
+                condition: Condition::AL,
+                instruction_type: ARMv5InstructionType::Generic { 
+                    op: ARMv5GenericOperation::MRS
+                }
+            }
+        ),
+        msr: (
+            0x216ff004,
+            ARMv5Instruction {
+                condition: Condition::HS,
+                instruction_type: ARMv5InstructionType::Generic { 
+                    op: ARMv5GenericOperation::MSR
+                }
+            }
+        )//,
+        //cdp: (
+        //    0x7efc574d,
+        //    ARMv5Instruction {
+        //        condition: Condition::VC,
+        //        instruction_type: ARMv5InstructionType::Generic { 
+        //            op: ARMv5GenericOperation::CDP
+        //        }
+        //    }
+        //),
+        //cdp2: (
+        //    0xfef1f64e,
+        //    ARMv5Instruction {
+        //        condition: Condition::Unconditional,
+        //        instruction_type: ARMv5InstructionType::Generic { 
+        //            op: ARMv5GenericOperation::CDP2
+        //        }
+        //    }
+        //),
+        //ldc: (
+        //    0x8d904daa,
+        //    ARMv5Instruction {
+        //        condition: Condition::HI,
+        //        instruction_type: ARMv5InstructionType::Generic { 
+        //            op: ARMv5GenericOperation::LDC
+        //        }
+        //    }
+        //),
+        //ldc2: (
+        //    0xfd96bf7b,
+        //    ARMv5Instruction {
+        //        condition: Condition::Unconditional,
+        //        instruction_type: ARMv5InstructionType::Generic { 
+        //            op: ARMv5GenericOperation::LDC2
+        //        }
+        //    }
+        //),
+        //mcr: (
+        //    0x9ee2c610,
+        //    ARMv5Instruction {
+        //        condition: Condition::LS,
+        //        instruction_type: ARMv5InstructionType::Generic { 
+        //            op: ARMv5GenericOperation::MCR
+        //        }
+        //    }
+        //),
+        //mcr2: (
+        //    0xfe4631b0,
+        //    ARMv5Instruction {
+        //        condition: Condition::Unconditional,
+        //        instruction_type: ARMv5InstructionType::Generic { 
+        //            op: ARMv5GenericOperation::MCR2
+        //        }
+        //    }
+        //),
+        //mrc: (
+        //    0xeede8a3b,
+        //    ARMv5Instruction {
+        //        condition: Condition::AL,
+        //        instruction_type: ARMv5InstructionType::Generic { 
+        //            op: ARMv5GenericOperation::MRC
+        //        }
+        //    }
+        //),
+        //mrc2: (
+        //    0xfeb5d712,
+        //    ARMv5Instruction {
+        //        condition: Condition::Unconditional,
+        //        instruction_type: ARMv5InstructionType::Generic { 
+        //            op: ARMv5GenericOperation::MRC2
+        //        }
+        //    }
+        //),
+        //stc: (
+        //    0xdd80d4d5,
+        //    ARMv5Instruction {
+        //        condition: Condition::LE,
+        //        instruction_type: ARMv5InstructionType::Generic { 
+        //            op: ARMv5GenericOperation::STC
+        //        }
+        //    }
+        //),
+        //stc2: (
+        //    0xfd8f052e,
+        //    ARMv5Instruction {
+        //        condition: Condition::Unconditional,
+        //        instruction_type: ARMv5InstructionType::Generic { 
+        //            op: ARMv5GenericOperation::STC2
+        //        }
+        //    }
+        //)
+    }
 }

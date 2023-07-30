@@ -54,7 +54,7 @@ impl ARMSimulator {
         cpu.set_register(RegNames::PC, elf_file.get_entry_point() as i32);
         cpu.set_register(RegNames::SP, stack_pointer as i32);
         cpu.set_encoding(elf_file.get_encoding());
-        elf_file.load_memory(&mut cpu)?;
+        elf_file.load_into_memory(&mut cpu)?;
         Ok(Box::new(cpu))
     }
 }

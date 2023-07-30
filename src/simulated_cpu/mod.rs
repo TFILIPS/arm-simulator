@@ -1,9 +1,13 @@
 use std::{io::Write, collections::HashMap};
 
+use instructions::Instruction;
 use names::{RegNames, FlagNames};
 use instruction_decoder::{InstructionDecoder, ARMv5Decoder};
-use instructions::Instruction;
-use crate::utils::{Endian, slice_to_u32, OutputDevice, ExitBehaviour, Memory, MemoryException};
+
+use crate::utils::{
+    Endian, slice_to_u32, OutputDevice, 
+    ExitBehaviour, Memory, MemoryException
+};
 
 pub mod names;
 
@@ -11,19 +15,19 @@ mod instructions;
 mod operands;
 mod instruction_decoder;
 
-pub trait SimulatedCPU<S> {
+//Here R is the type of the registers, which should be i8, i16, i32 or i64.
+pub trait SimulatedCPU<R> {
     fn step(&mut self) -> Result<(), SimulationException>;
     fn disassemble_memory(
         &self, start: u32, end: u32, labels: Vec<(u32, String)>
     ) -> String;
 
-    fn get_register(&self, register: RegNames) -> S;
-    fn set_register(&mut self, register: RegNames, value: S);
-    fn get_registers(&self) -> &[S];
+    fn get_register(&self, register: RegNames) -> R;
+    fn set_register(&mut self, register: RegNames, value: R);
+    fn get_registers(&self) -> &[R];
     fn get_flag(&self, flag: FlagNames) -> bool;
     fn set_flag(&mut self, flag: FlagNames, value: bool);
     fn get_flags(&self) -> &[bool];
-
     fn set_encoding(&mut self, encoding: Endian);
 }
 
@@ -37,27 +41,35 @@ pub struct ARMv5CPU {
 }
 impl SimulatedCPU<i32> for ARMv5CPU {
     fn step(&mut self) -> Result<(), SimulationException> {
-        let address: u32 = self.registers[RegNames::PC] as u32;
         let mut result: Result<(), SimulationException> = Ok(());
 
+        let address: u32 = self.registers[RegNames::PC] as u32;
         match self.get_memory(address, 4) {
             Ok(bytes) => {
                 let bits: u32 = slice_to_u32(&bytes, &self.encoding);
                 let instruction: Box<dyn Instruction<ARMv5CPU, i32>> = 
                     Box::new(ARMv5Decoder::decode(bits));
+
                 if let Err(err) = instruction.execute(self) {
+                    //Clarify returned error message
                     result = Err(SimulationException { 
                         kind: err.kind, 
                         msg: format!(
-                            "Exception caused by instruction at 0x{address:X}: {}\n", err.msg)
+                            "Exception caused by instruction at 0x{:X}: {}\n", 
+                            address,err.msg
+                        )
                     });
                 }
             },
             Err(mem_err) => {
+                //Convert and clarify returned error message
                 let sim_err: SimulationException = mem_err.into();
                 result = Err(SimulationException { 
                     kind: sim_err.kind, 
-                    msg: format!("Unable to fetch instruction at address 0x{address:X}!\n")
+                    msg: format!(
+                        "Unable to fetch instruction at address 0x{:X}!\n",
+                        address
+                    )
                 });
             }
         }
@@ -193,15 +205,12 @@ impl ARMv5CPU {
 }
 
 #[derive(Debug)]
-#[allow(dead_code)]
-pub struct SimulationException { kind: SimulationExceptionKind, msg: String }
-
-#[derive(Debug)]
 pub enum SimulationExceptionKind {
     DataAbort{memory_address: usize, size: usize}, 
     UnsupportedInstruction, UndefinedInstruction
 }
-
+#[derive(Debug)]
+pub struct SimulationException { kind: SimulationExceptionKind, msg: String }
 impl From<MemoryException> for SimulationException {
     fn from(value: MemoryException) -> Self {
         SimulationException { 

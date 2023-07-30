@@ -7,7 +7,7 @@ use barrel_shifter::ShiftType;
 
 pub mod barrel_shifter;
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShifterOperand {
     ImmediateShift { shift_amount: u8, shift: ShiftType, rm: RegNames },
     RegisterShift { rs: RegNames, shift: ShiftType, rm: RegNames },
@@ -38,7 +38,15 @@ impl Display for ShifterOperand {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OffsetType {
+    Immediate { offset: u16 },
+    // this is basically the same as ScaledRegister with 0 for shift parameters
+    Register { rm: RegNames },
+    ScaledRegister { shift_imm: u8, shift: ShiftType, rm: RegNames }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AddressingMode {
     pub p: bool, pub u: bool, pub w: bool, pub rn: RegNames,
     pub offset_type: OffsetType
@@ -66,17 +74,7 @@ impl Display for AddressingMode {
     }
 }
 
-
-
-#[derive(Clone, Copy)]
-pub enum OffsetType {
-    Immediate { offset: u16 },
-    // this is basically the same as ScaledRegister with 0 for shift parameters
-    Register { rm: RegNames },
-    ScaledRegister { shift_imm: u8, shift: ShiftType, rm: RegNames }
-}
-
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AddressingModeMultiple { 
     pub p: bool, pub u: bool, pub w: bool, 
     pub rn: RegNames, pub register_list: u16

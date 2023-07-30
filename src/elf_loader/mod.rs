@@ -22,7 +22,7 @@ const OSABI_KEY: u8 = 0x0; // UNIX - System V
 // Modifiable values: For this project we want an 32-bit ARM executable
 const CLASS_KEY: u8 = 0x1; // 32-Bit
 const MACHINE_KEY: u16 = 0x28; // ARM
-const ELF_TYPE_KEY: u16 = 0x2; // executeable
+const ELF_TYPE_KEY: u16 = 0x2; // executable
 
 pub struct ELFFile {
     elf_header: ELFHeader,
@@ -51,7 +51,7 @@ impl ELFFile {
         Ok(Self{ elf_header, raw_data, encoding })
     }
 
-    pub fn load_memory(
+    pub fn load_into_memory(
         &self, target: &mut dyn Memory
     ) -> Result<(), String> {
         let headers: Vec<ProgramHeader> = self.read_program_headers()?;

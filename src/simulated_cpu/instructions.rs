@@ -13,9 +13,11 @@ pub trait Instruction<C: SimulatedCPU<S>, S>: Display {
     fn execute(&self, cpu: &mut C) -> Result<(), SimulationException>;
 }
 
+// Todo: Remove Clone and Copy from all enums where its possible and rent values
+
 #[repr(u32)]
-#[derive(Debug, Clone, Copy)]
 #[allow(dead_code)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Condition { 
     EQ, NE, HS, LO, MI, PL, VS, VC, HI, LS, GE, LT, GT, LE, AL, Unconditional
 }
@@ -63,7 +65,7 @@ impl Display for Condition {
 
 #[repr(u32)]
 #[allow(dead_code)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ARMv5DataProcessingOperation {
     AND, EOR, SUB, RSB, ADD, ADC, SBC, RSC,
     TST, TEQ, CMP, CMN, ORR, MOV, BIC, MVN
@@ -79,44 +81,45 @@ impl ARMv5DataProcessingOperation {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ARMv5MultiplyOperation {
     MUL, MLA, SMULL, UMULL, SMLAL, UMLAL
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ARMv5MiscellaneousOperation {
     CLZ
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ARMv5BranchOperation {
     B, BL, BX, BLX
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ARMv5LoadStoreOperation {
     LDR, LDRB, LDRBT, LDRH, LDRSB, LDRSH, 
     LDRT, STR, STRB, STRBT, STRH, STRT
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ARMv5LoadStoreMultipleOperation {
     LDM, STM
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum ARMv5SynchronizationOperation {
     SWP, SWPB
 }
 #[allow(dead_code)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ARMv5GenericOperation {
     SWI, BKPT, MRS, MSR, CDP, CDP2, LDC, 
     LDC2, MCR, MCR2, MRC, MRC2, STC, STC2
 }
 
 //maybe add undefined
+#[derive(Debug, PartialEq, Eq)]
 pub enum ARMv5InstructionType {
     DataProcessing { 
         op: ARMv5DataProcessingOperation, s: bool, rn: RegNames, 
@@ -148,6 +151,7 @@ pub enum ARMv5InstructionType {
 }
 
 //maybe provide constructor
+#[derive(Debug, PartialEq, Eq)]
 pub struct ARMv5Instruction {
     pub condition: Condition,
     pub instruction_type: ARMv5InstructionType
@@ -156,7 +160,7 @@ impl Instruction<ARMv5CPU, i32> for ARMv5Instruction {
     fn execute(&self, cpu: &mut ARMv5CPU) -> Result<(), SimulationException> {
         if !self.condition.is_satisfied(&cpu.flags) { return Ok(()); }
 
-        match self.instruction_type {
+        match &self.instruction_type {
             ARMv5InstructionType::DataProcessing { op, s, rn, rd, so } => {
                 let function = match op {
                     ARMv5DataProcessingOperation::AND => ARMv5CPU::and,
@@ -176,7 +180,7 @@ impl Instruction<ARMv5CPU, i32> for ARMv5Instruction {
                     ARMv5DataProcessingOperation::BIC => ARMv5CPU::bic,
                     ARMv5DataProcessingOperation::MVN => ARMv5CPU::mvn
                 };
-                function(cpu, s, rn, rd, so)
+                function(cpu, *s, *rn, *rd, *so)
             }
             ARMv5InstructionType::Multiply { op, s, rd_hi, rn_lo, rs, rm } => {
                 let function = match op {
@@ -187,20 +191,20 @@ impl Instruction<ARMv5CPU, i32> for ARMv5Instruction {
                     ARMv5MultiplyOperation::SMLAL => ARMv5CPU::smlal,
                     ARMv5MultiplyOperation::UMLAL => ARMv5CPU::umlal
                 };
-                function(cpu, s, rd_hi, rn_lo, rs, rm)
+                function(cpu, *s, *rd_hi, *rn_lo, *rs, *rm)
             },
             ARMv5InstructionType::Miscellaneous { op, rd, rm } => {
                 let function = match op {
                     ARMv5MiscellaneousOperation::CLZ => ARMv5CPU::clz
                 };
-                function(cpu, rd, rm)
+                function(cpu, *rd, *rm)
             },
             ARMv5InstructionType::Branch { op, si, rm } => {
                 match op {
-                    ARMv5BranchOperation::B => ARMv5CPU::b(cpu, false, si),
-                    ARMv5BranchOperation::BL => ARMv5CPU::b(cpu, true, si),
-                    ARMv5BranchOperation::BX => ARMv5CPU::bx(cpu, false, rm),
-                    ARMv5BranchOperation::BLX => ARMv5CPU::bx(cpu, true, rm)
+                    ARMv5BranchOperation::B => ARMv5CPU::b(cpu, false, *si),
+                    ARMv5BranchOperation::BL => ARMv5CPU::b(cpu, true, *si),
+                    ARMv5BranchOperation::BX => ARMv5CPU::bx(cpu, false, *rm),
+                    ARMv5BranchOperation::BLX => ARMv5CPU::bx(cpu, true, *rm)
                 }
             },
             ARMv5InstructionType::LoadStore { op, rd, am } => {
@@ -218,21 +222,21 @@ impl Instruction<ARMv5CPU, i32> for ARMv5Instruction {
                     ARMv5LoadStoreOperation::STRH => ARMv5CPU::strh,
                     ARMv5LoadStoreOperation::STRT => ARMv5CPU::strt
                 };
-                function(cpu, rd, am)
+                function(cpu, *rd, *am)
             },
             ARMv5InstructionType::LoadStoreMultiple { op, amm } => {
                 let function = match op {
                     ARMv5LoadStoreMultipleOperation::LDM => ARMv5CPU::ldm,
                     ARMv5LoadStoreMultipleOperation::STM => ARMv5CPU::stm
                 };
-                function(cpu, amm)
+                function(cpu, *amm)
             },
             ARMv5InstructionType::Synchronization { op, rn, rd, rm } => {
                 let function = match op {
                     ARMv5SynchronizationOperation::SWP => ARMv5CPU::swp,
                     ARMv5SynchronizationOperation::SWPB => ARMv5CPU::swpb,
                 };
-                function(cpu, rn, rd, rm)
+                function(cpu, *rn, *rd, *rm)
             },
             ARMv5InstructionType::Generic { op } => {
                 let function = match op {
@@ -262,10 +266,10 @@ impl Instruction<ARMv5CPU, i32> for ARMv5Instruction {
 }
 impl Display for ARMv5Instruction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let cond: Condition = self.condition;
-        match self.instruction_type {
+        let cond: &Condition = &self.condition;
+        match &self.instruction_type {
             ARMv5InstructionType::DataProcessing { op, s, rn, rd, so } => {
-                let s: &str = if s {"S"} else {""};
+                let s: &str = if *s {"S"} else {""};
                 match op {
                     ARMv5DataProcessingOperation::TST |
                     ARMv5DataProcessingOperation::TEQ |
@@ -281,7 +285,7 @@ impl Display for ARMv5Instruction {
                 }
             },
             ARMv5InstructionType::Multiply { op, s, rn_lo, rd_hi, rs, rm } => {
-                let s: &str = if s {"S"} else {""};
+                let s: &str = if *s {"S"} else {""};
                 match op {
                     ARMv5MultiplyOperation::MUL => write!(
                         f, "{:?}{cond}{s} {rd_hi}, {rm}, {rs}", op
@@ -308,12 +312,14 @@ impl Display for ARMv5Instruction {
                     }
                 }
             },
+            // not correct -> str[condition][b][t]
             ARMv5InstructionType::LoadStore { op, rd, am } => {
                 write!(f, "{:?}{cond} {rd}, {am}", op)
             },
             ARMv5InstructionType::LoadStoreMultiple { op, amm } => {
                 write!(f, "{:?}{cond}{amm}", op)
             },
+            // not correct -> swp[condition][b]
             ARMv5InstructionType::Synchronization { op, rn, rd, rm } => {
                 write!(f, "{:?}{cond} {rd} {rm} {rn}", op)
             },

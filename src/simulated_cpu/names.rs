@@ -1,6 +1,6 @@
 use std::{ops::{Index, IndexMut}, mem::transmute, fmt::Display};
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FlagNames { 
     N, Z, C, V 
 }
@@ -17,7 +17,7 @@ impl<T> IndexMut<FlagNames> for [T] {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
 pub enum RegNames { 
     R0, R1, R2, R3, R4, R5, R6, 
