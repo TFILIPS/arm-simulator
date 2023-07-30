@@ -2,7 +2,8 @@ use crate::utils::{BitAccess, T, F};
 use super::{
     SimulatedCPU, ARMv5CPU, names::RegNames, instructions::*,
     operands::{
-        ShifterOperand, AddressingMode, OffsetType, AddressingModeMultiple
+        ShifterOperand, AddressingMode, OffsetType,
+        AddressingModeMultiple, BranchOperator
     }
 };
 
@@ -11,23 +12,21 @@ pub trait InstructionDecoder<I: Instruction<C, S>, C: SimulatedCPU<S>, S> {
 }
 
 //Todo: refactor condition
+//https://developer.arm.com/documentation/ddi0406/c/Application-Level-Architecture/ARM-Instruction-Set-Encoding/ARM-instruction-set-encoding?lang=en
 pub struct ARMv5Decoder;
 impl InstructionDecoder<ARMv5Instruction, ARMv5CPU, i32> for ARMv5Decoder {
     fn decode(instruction_bits: u32) -> ARMv5Instruction {
-        //shorten variable name
-        let inst_bits: u32 = instruction_bits;
-        if inst_bits.cut_bits(28..=31) != 0b1111 {
-            match inst_bits.cut_bits(26..=27) {
-                0b00 => ARMv5Decoder::data_and_miscellaneos(inst_bits),
-                0b01 => ARMv5Decoder::load_store(inst_bits),
-                0b10 => ARMv5Decoder::branch_and_block_transfer(inst_bits),
-                0b11 => ARMv5Decoder::copro_and_swi(inst_bits),
+        let category = if instruction_bits.cut_bits(28..=31) != 0b1111 {
+            match instruction_bits.cut_bits(26..=27) {
+                0b00 => ARMv5Decoder::data_and_miscellaneos,
+                0b01 => ARMv5Decoder::load_store,
+                0b10 => ARMv5Decoder::branch_and_block_transfer,
+                0b11 => ARMv5Decoder::coprocessor_and_swi,
                 _ => panic!("Unreachable code!")
             }
         }
-        else {
-            todo!("Unconditional instructions")
-        }
+        else { ARMv5Decoder::unconditional };
+        category(instruction_bits)
     }
 }
 impl ARMv5Decoder {
@@ -129,13 +128,13 @@ impl ARMv5Decoder {
                 op: ARMv5GenericOperation::MSR
             },
             (0b001, 0b01) => ARMv5InstructionType::Branch {
-                op: ARMv5BranchOperation::BX, si: 0, rm
+                op: ARMv5BranchOperation::BX, bo: BranchOperator::Register(rm)
             },
             (0b001, 0b11) => ARMv5InstructionType::Miscellaneous { 
                 op: ARMv5MiscellaneousOperation::CLZ, rd, rm 
             },
             (0b011, 0b01) => ARMv5InstructionType::Branch {
-                op: ARMv5BranchOperation::BLX, si: 0, rm
+                op: ARMv5BranchOperation::BLX, bo: BranchOperator::Register(rm)
             },
             (0b111, 0b01) => ARMv5InstructionType::Generic {
                 op: ARMv5GenericOperation::BKPT
@@ -293,9 +292,11 @@ impl ARMv5Decoder {
             imm = (imm << 8) >> 8; //sign extend
             let op: ARMv5BranchOperation = match inst_bits.get_bit(24) {
                 true => ARMv5BranchOperation::BL,
-                false => ARMv5BranchOperation::B,
+                false => ARMv5BranchOperation::B
             };
-            ARMv5InstructionType::Branch { op, si: imm, rm: 0.into() }
+            ARMv5InstructionType::Branch { op, 
+                bo: BranchOperator::Offset(imm, false)
+            }
         }
         else{
             let amm: AddressingModeMultiple = AddressingModeMultiple { 
@@ -317,31 +318,75 @@ impl ARMv5Decoder {
         ARMv5Instruction { condition, instruction_type }
     }
 
-    fn copro_and_swi(inst_bits: u32) -> ARMv5Instruction {
-        let condition: Condition = Condition::from_instruction(inst_bits);
-        if inst_bits.cut_bits(24..=25) == 0b11 {
-            ARMv5Instruction { 
-                condition, 
-                instruction_type: ARMv5InstructionType::Generic { 
-                    op: ARMv5GenericOperation::SWI 
-                }
-            }
+    fn coprocessor_and_swi(inst_bits: u32) -> ARMv5Instruction {
+        let op1: u32 = inst_bits.cut_bits(20..=25);
+
+        let op: ARMv5GenericOperation = if bm(op1, 0b110000, 0b110000) {
+            ARMv5GenericOperation::SWI 
         }
         else if !bm(inst_bits.cut_bits(8..=11), 0b1110, 0x1010) {
-            let op1 = inst_bits.cut_bits(20..=25);
-            if bm(op1, 0b100001, 0) && !bm(op1, 0b111011, 0) {
-                ARMv5Instruction { 
-                    condition, 
-                    instruction_type: ARMv5InstructionType::Generic { 
-                        op: ARMv5GenericOperation::STC
-                    }
+            if bm(op1, 0b100001, 0b0) && !bm(op1, 0b111011, 0b0) {
+                ARMv5GenericOperation::STC
+            }
+            else if bm(op1, 0b100001, 0b1) && !bm(op1, 0b111011, 0b1) {
+                ARMv5GenericOperation::LDC
+            }
+            else if bm(op1, 0b110000, 0b100000) {
+                if inst_bits.get_bit(4) {
+                    if inst_bits.get_bit(20) { ARMv5GenericOperation::MRC }
+                    else { ARMv5GenericOperation::MCR }
                 }
+                else { ARMv5GenericOperation::CDP }
             }
-            else {
-                ARMv5Decoder::UNDEFINED_INSTRUCTION 
-            }
+            else { return ARMv5Decoder::UNDEFINED_INSTRUCTION; }
         }
-        else { ARMv5Decoder::UNDEFINED_INSTRUCTION  }
+        else { return ARMv5Decoder::UNDEFINED_INSTRUCTION; };
+
+        ARMv5Instruction { 
+            condition: Condition::from_instruction(inst_bits), 
+            instruction_type: ARMv5InstructionType::Generic { op }
+        }
+    }
+
+    fn unconditional(inst_bits: u32) -> ARMv5Instruction {
+        let op1: u32 = inst_bits.cut_bits(20..=27);
+        if bm(op1, 0b11100000, 0b10100000) {
+            let mut imm: i32 = inst_bits.cut_bits(0..24) as i32;
+            imm = (imm << 8) >> 8; //sign extend
+            return ARMv5Instruction {
+                condition: Condition::Unconditional,
+                instruction_type: ARMv5InstructionType::Branch {
+                    op: ARMv5BranchOperation::BLX, 
+                    bo: BranchOperator::Offset(imm, inst_bits.get_bit(24)) 
+                }
+            };
+        }
+        let op: ARMv5GenericOperation = 
+            if bm(op1, 0b11100001, 0b11000000) {
+                if !bm(op1, 0b11111011, 0b11000000) {
+                    ARMv5GenericOperation::STC2
+                }
+                else { return ARMv5Decoder::UNDEFINED_INSTRUCTION; }
+            }
+            else if bm(op1, 0b11100001, 0b11000001) {
+                if !bm(op1, 0b11111011, 0b11000001) {
+                    ARMv5GenericOperation::LDC2
+                }
+                else { return ARMv5Decoder::UNDEFINED_INSTRUCTION; }
+            }
+            else if bm(op1, 0b11110000, 0b11100000) {
+                if inst_bits.get_bit(4) {
+                    if inst_bits.get_bit(20) { ARMv5GenericOperation::MRC2 }
+                    else { ARMv5GenericOperation::MCR2 }
+                }
+                else { ARMv5GenericOperation::CDP2 }
+            }
+            else { return ARMv5Decoder::UNDEFINED_INSTRUCTION; };
+
+            ARMv5Instruction { 
+                condition: Condition::Unconditional, 
+                instruction_type: ARMv5InstructionType::Generic { op } 
+            }
     }
 }
 
@@ -352,13 +397,9 @@ fn bm(value: u32, mask: u32, expectation: u32) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::simulated_cpu::{instructions::{
-        ARMv5Instruction, Condition, ARMv5InstructionType,
-        ARMv5DataProcessingOperation, ARMv5MultiplyOperation, 
-        ARMv5MiscellaneousOperation, ARMv5BranchOperation, 
-        ARMv5LoadStoreOperation, ARMv5LoadStoreMultipleOperation, ARMv5SynchronizationOperation, ARMv5GenericOperation
-    }, names::RegNames, operands::{
-            ShifterOperand, barrel_shifter::ShiftType, AddressingMode, OffsetType, AddressingModeMultiple
+    use crate::simulated_cpu::{instructions::*, names::RegNames, operands::{
+            ShifterOperand, barrel_shifter::ShiftType, 
+            AddressingMode, OffsetType, AddressingModeMultiple, BranchOperator
         }
     };
 
@@ -749,8 +790,7 @@ mod tests {
                 condition: Condition::LS,
                 instruction_type: ARMv5InstructionType::Branch { 
                     op: ARMv5BranchOperation::B,
-                    si: 147904, 
-                    rm: RegNames::R0
+                    bo: BranchOperator::Offset(147904, false)
                 }
             }
         ),
@@ -759,9 +799,8 @@ mod tests {
             ARMv5Instruction {
                 condition: Condition::AL,
                 instruction_type: ARMv5InstructionType::Branch { 
-                    op: ARMv5BranchOperation::BL, 
-                    si: 2806625, 
-                    rm: RegNames::R0
+                    op: ARMv5BranchOperation::BL,
+                    bo: BranchOperator::Offset(2806625, false)
                 }
             }
         ),
@@ -771,8 +810,7 @@ mod tests {
                 condition: Condition::HI,
                 instruction_type: ARMv5InstructionType::Branch { 
                     op: ARMv5BranchOperation::BX,
-                    si: 0, 
-                    rm: RegNames::R5
+                    bo: BranchOperator::Register(RegNames::R5)
                 }
             }
         ),
@@ -794,8 +832,7 @@ mod tests {
                 condition: Condition::NE,
                 instruction_type: ARMv5InstructionType::Branch { 
                     op: ARMv5BranchOperation::BLX,
-                    si: 0, 
-                    rm: RegNames::R9
+                    bo: BranchOperator::Register(RegNames::R9)
                 }
             }
         ),
@@ -1130,96 +1167,96 @@ mod tests {
                     op: ARMv5GenericOperation::MSR
                 }
             }
-        )//,
-        //cdp: (
-        //    0x7efc574d,
-        //    ARMv5Instruction {
-        //        condition: Condition::VC,
-        //        instruction_type: ARMv5InstructionType::Generic { 
-        //            op: ARMv5GenericOperation::CDP
-        //        }
-        //    }
-        //),
-        //cdp2: (
-        //    0xfef1f64e,
-        //    ARMv5Instruction {
-        //        condition: Condition::Unconditional,
-        //        instruction_type: ARMv5InstructionType::Generic { 
-        //            op: ARMv5GenericOperation::CDP2
-        //        }
-        //    }
-        //),
-        //ldc: (
-        //    0x8d904daa,
-        //    ARMv5Instruction {
-        //        condition: Condition::HI,
-        //        instruction_type: ARMv5InstructionType::Generic { 
-        //            op: ARMv5GenericOperation::LDC
-        //        }
-        //    }
-        //),
-        //ldc2: (
-        //    0xfd96bf7b,
-        //    ARMv5Instruction {
-        //        condition: Condition::Unconditional,
-        //        instruction_type: ARMv5InstructionType::Generic { 
-        //            op: ARMv5GenericOperation::LDC2
-        //        }
-        //    }
-        //),
-        //mcr: (
-        //    0x9ee2c610,
-        //    ARMv5Instruction {
-        //        condition: Condition::LS,
-        //        instruction_type: ARMv5InstructionType::Generic { 
-        //            op: ARMv5GenericOperation::MCR
-        //        }
-        //    }
-        //),
-        //mcr2: (
-        //    0xfe4631b0,
-        //    ARMv5Instruction {
-        //        condition: Condition::Unconditional,
-        //        instruction_type: ARMv5InstructionType::Generic { 
-        //            op: ARMv5GenericOperation::MCR2
-        //        }
-        //    }
-        //),
-        //mrc: (
-        //    0xeede8a3b,
-        //    ARMv5Instruction {
-        //        condition: Condition::AL,
-        //        instruction_type: ARMv5InstructionType::Generic { 
-        //            op: ARMv5GenericOperation::MRC
-        //        }
-        //    }
-        //),
-        //mrc2: (
-        //    0xfeb5d712,
-        //    ARMv5Instruction {
-        //        condition: Condition::Unconditional,
-        //        instruction_type: ARMv5InstructionType::Generic { 
-        //            op: ARMv5GenericOperation::MRC2
-        //        }
-        //    }
-        //),
-        //stc: (
-        //    0xdd80d4d5,
-        //    ARMv5Instruction {
-        //        condition: Condition::LE,
-        //        instruction_type: ARMv5InstructionType::Generic { 
-        //            op: ARMv5GenericOperation::STC
-        //        }
-        //    }
-        //),
-        //stc2: (
-        //    0xfd8f052e,
-        //    ARMv5Instruction {
-        //        condition: Condition::Unconditional,
-        //        instruction_type: ARMv5InstructionType::Generic { 
-        //            op: ARMv5GenericOperation::STC2
-        //        }
-        //    }
-        //)
+        ),
+        cdp: (
+            0x7efc574d,
+            ARMv5Instruction {
+                condition: Condition::VC,
+                instruction_type: ARMv5InstructionType::Generic { 
+                    op: ARMv5GenericOperation::CDP
+                }
+            }
+        ),
+        cdp2: (
+            0xfef1f64e,
+            ARMv5Instruction {
+                condition: Condition::Unconditional,
+                instruction_type: ARMv5InstructionType::Generic { 
+                    op: ARMv5GenericOperation::CDP2
+                }
+            }
+        ),
+        ldc: (
+            0x8d904daa,
+            ARMv5Instruction {
+                condition: Condition::HI,
+                instruction_type: ARMv5InstructionType::Generic { 
+                    op: ARMv5GenericOperation::LDC
+                }
+            }
+        ),
+        ldc2: (
+            0xfd96bf7b,
+            ARMv5Instruction {
+                condition: Condition::Unconditional,
+                instruction_type: ARMv5InstructionType::Generic { 
+                    op: ARMv5GenericOperation::LDC2
+                }
+            }
+        ),
+        mcr: (
+            0x9ee2c610,
+            ARMv5Instruction {
+                condition: Condition::LS,
+                instruction_type: ARMv5InstructionType::Generic { 
+                    op: ARMv5GenericOperation::MCR
+                }
+            }
+        ),
+        mcr2: (
+            0xfe4631b0,
+            ARMv5Instruction {
+                condition: Condition::Unconditional,
+                instruction_type: ARMv5InstructionType::Generic { 
+                    op: ARMv5GenericOperation::MCR2
+                }
+            }
+        ),
+        mrc: (
+            0xeede8a3b,
+            ARMv5Instruction {
+                condition: Condition::AL,
+                instruction_type: ARMv5InstructionType::Generic { 
+                    op: ARMv5GenericOperation::MRC
+                }
+            }
+        ),
+        mrc2: (
+            0xfeb5d712,
+            ARMv5Instruction {
+                condition: Condition::Unconditional,
+                instruction_type: ARMv5InstructionType::Generic { 
+                    op: ARMv5GenericOperation::MRC2
+                }
+            }
+        ),
+        stc: (
+            0xdd80d4d5,
+            ARMv5Instruction {
+                condition: Condition::LE,
+                instruction_type: ARMv5InstructionType::Generic { 
+                    op: ARMv5GenericOperation::STC
+                }
+            }
+        ),
+        stc2: (
+            0xfd8f052e,
+            ARMv5Instruction {
+                condition: Condition::Unconditional,
+                instruction_type: ARMv5InstructionType::Generic { 
+                    op: ARMv5GenericOperation::STC2
+                }
+            }
+        )
     }
 }

@@ -97,6 +97,12 @@ impl Display for AddressingModeMultiple {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum BranchOperator {
+    Register(RegNames),
+    Offset(i32, bool),
+}
+
 impl ARMv5CPU {
     // returns shifted value + possibly new carry flag
     pub fn perform_shift(&self, so: ShifterOperand) -> (i32, bool) {

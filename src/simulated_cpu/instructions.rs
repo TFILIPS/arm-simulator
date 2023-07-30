@@ -2,7 +2,10 @@ use std::{ops::Range, iter::StepBy, fmt::Display, mem::transmute};
 
 use super::{
     SimulatedCPU, ARMv5CPU, names::{RegNames, FlagNames}, SimulationException,
-    operands::{ShifterOperand, AddressingMode, AddressingModeMultiple}, 
+    operands::{
+        ShifterOperand, AddressingMode, 
+        AddressingModeMultiple, BranchOperator
+    }, 
     SimulationExceptionKind
 };
 use crate::utils::{
@@ -133,7 +136,7 @@ pub enum ARMv5InstructionType {
         op: ARMv5MiscellaneousOperation, rd: RegNames, rm: RegNames 
     },
     Branch { 
-        op: ARMv5BranchOperation, si: i32, rm: RegNames
+        op: ARMv5BranchOperation, bo: BranchOperator
     },
     LoadStore {
         op: ARMv5LoadStoreOperation, rd: RegNames, am: AddressingMode
@@ -199,12 +202,12 @@ impl Instruction<ARMv5CPU, i32> for ARMv5Instruction {
                 };
                 function(cpu, *rd, *rm)
             },
-            ARMv5InstructionType::Branch { op, si, rm } => {
+            ARMv5InstructionType::Branch { op, bo } => {
                 match op {
-                    ARMv5BranchOperation::B => ARMv5CPU::b(cpu, false, *si),
-                    ARMv5BranchOperation::BL => ARMv5CPU::b(cpu, true, *si),
-                    ARMv5BranchOperation::BX => ARMv5CPU::bx(cpu, false, *rm),
-                    ARMv5BranchOperation::BLX => ARMv5CPU::bx(cpu, true, *rm)
+                    ARMv5BranchOperation::B => ARMv5CPU::b(cpu, false, bo),
+                    ARMv5BranchOperation::BL => ARMv5CPU::b(cpu, true, bo),
+                    ARMv5BranchOperation::BX => ARMv5CPU::bx(cpu, false, bo),
+                    ARMv5BranchOperation::BLX => ARMv5CPU::bx(cpu, true, bo)
                 }
             },
             ARMv5InstructionType::LoadStore { op, rd, am } => {
@@ -301,15 +304,14 @@ impl Display for ARMv5Instruction {
             ARMv5InstructionType::Miscellaneous { op, rd, rm } => {
                 write!(f, "{:?}{cond} {rd}, {rm}", op)
             },
-            ARMv5InstructionType::Branch { op, si, rm } => {
-                match op {
-                    ARMv5BranchOperation::B | ARMv5BranchOperation::BL => {
-                        //improve with lable or correct address
-                        write!(f, "{:?}{cond} 0x{:x}", op, si)
+            ARMv5InstructionType::Branch { op, bo } => {
+                match bo {
+                    BranchOperator::Register(reg) => {
+                        write!(f, "{op:?}{cond} {reg}") 
                     },
-                    ARMv5BranchOperation::BX | ARMv5BranchOperation::BLX => {
-                        write!(f, "{op:?}{cond} {rm}")
-                    }
+                    BranchOperator::Offset(offset, ..) => {
+                        write!(f, "{op:?}{cond} 0x{offset:x}")
+                    },
                 }
             },
             // not correct -> str[condition][b][t]
@@ -755,7 +757,7 @@ impl ARMv5CPU {
     
 
     // Branch instructions
-    fn b(&mut self, l: bool, si: i32) -> Result<(), SimulationException> {
+    fn b(&mut self, l: bool, bo: &BranchOperator) -> Result<(), SimulationException> {
         let prog_addr: i32 = self.get_register_intern(RegNames::PC);
 
         if l {
@@ -763,25 +765,46 @@ impl ARMv5CPU {
             self.set_register(RegNames::LR, link_addr);
         }
 
-        let new_prog_addr: i32 = prog_addr.wrapping_add(si << 2);
-        self.set_register(RegNames::PC, new_prog_addr);
+        match bo {
+            BranchOperator::Offset(offset, ..) => {
+                let new_prog_addr: i32 = prog_addr.wrapping_add(offset << 2);
+                self.set_register(RegNames::PC, new_prog_addr);
+            },
+            BranchOperator::Register(_) => {
+                panic!("Instruction B does not work with a register!");
+            }
+        };
 
         Ok(())
     }
 
-    fn bx(&mut self, l: bool, rm: RegNames) -> Result<(), SimulationException> {
+
+
+    fn bx(&mut self, l: bool, bo: &BranchOperator) -> Result<(), SimulationException> {
+        let prog_addr: i32 = self.get_register_intern(RegNames::PC);
         // This behaviour is incorrect! After switching to 
         // Thumb state on a non T CPU the next executed instruction
         // causes an UndefinedInstructionExeption. Then the cpu
         // switches back to ARM.
         if l {
-            let prog_addr: i32 = self.get_register_intern(RegNames::PC);
             let link_addr: i32 = prog_addr.wrapping_sub(4);
             self.set_register(RegNames::LR, link_addr);
         }
 
-        let target: i32 = self.get_register_intern(rm);
-        self.set_register(RegNames::PC, target);
+        match bo {
+            BranchOperator::Offset(offset, h) => {
+                if !l {
+                    panic!("Instruction BX does not work with an offset!");
+                }
+                let new_prog_addr: i32 = 
+                    prog_addr.wrapping_add((offset << 2) | ((*h as i32) << 1));
+                self.set_register(RegNames::PC, new_prog_addr);
+            },
+            BranchOperator::Register(rm) => {
+                let target: i32 = self.get_register_intern(*rm);
+                self.set_register(RegNames::PC, target);
+            }
+        };
 
         Ok(())
     }
