@@ -43,7 +43,7 @@ pub fn u32_to_array(value: u32, encoding: &Endian) -> [u8; 4] {
 }
 
 
-pub trait BitAccess {
+pub trait BitAccess { // ALEX: very nice, great engineering :)
    fn get_bit(&self, index: usize) -> bool;
    fn cut_bits<T: RangeBounds<usize>>(&self, range: T) -> Self;
 }

@@ -96,7 +96,7 @@ impl SimulatedCPU<i32> for ARMv5CPU {
 
         for address in (start..end).step_by(4) {
             if let Some(label) = label_map.get(&address) {
-                writeln!(buffer, "-------- | {label}:").unwrap();
+                writeln!(buffer, "-------- | {label}:").unwrap(); // ALEX: is there a cleaner way to do this?
             }
 
             let address: usize = address as usize;

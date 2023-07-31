@@ -140,7 +140,7 @@ pub struct SectionHeader {
     pub link: u32,
     pub info: u32,
     pub address_align: u32,
-    pub entrie_size: u32
+    pub entry_size: u32
 }
 impl ELFTableEntry for SectionHeader {
     const SIZE: usize = size_of::<SectionHeader>();
@@ -159,7 +159,7 @@ impl ELFTableEntry for SectionHeader {
             link: slice_to_u32(&bytes[24..28], encoding),
             info: slice_to_u32(&bytes[28..32], encoding),
             address_align: slice_to_u32(&bytes[32..36], encoding),
-            entrie_size:slice_to_u32(&bytes[36..40], encoding)
+            entry_size:slice_to_u32(&bytes[36..40], encoding)
         }
     }
 }

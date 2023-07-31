@@ -12,7 +12,7 @@ use crate::utils::{
     slice_to_u32, BitAccess, slice_to_u16, u32_to_array, u16_to_array, Memory
 };
 
-pub trait Instruction<C: SimulatedCPU<S>, S>: Display {
+pub trait Instruction<C: SimulatedCPU<S>, S>: Display { // ALEX: this is where you asked, right? This could be reorganized, but we should sit down together after I've had more time with the codebase
     fn execute(&self, cpu: &mut C) -> Result<(), SimulationException>;
 }
 

@@ -22,11 +22,12 @@ impl InstructionDecoder<ARMv5Instruction, ARMv5CPU, i32> for ARMv5Decoder {
                 0b01 => ARMv5Decoder::load_store,
                 0b10 => ARMv5Decoder::branch_and_block_transfer,
                 0b11 => ARMv5Decoder::coprocessor_and_swi,
-                _ => panic!("Unreachable code!")
+                _ => panic!("Unreachable code!") // ALEX: panicking is fine, but "unreachable code" seems like the wrong error message
             }
         }
-        else { ARMv5Decoder::unconditional };
-        category(instruction_bits)
+        else { ARMv5Decoder::unconditional }; // ALEX: this nested if is a bit hard to parse when reading the first time. Can you refactor?
+
+        category(instruction_bits) // ALEX: nice design :) Maybe we can improve the readability of this function together
     }
 }
 impl ARMv5Decoder {

@@ -92,9 +92,9 @@ impl ELFFile {
             let str_table: String = self.load_string_table(str_header)?;
 
             let entries: Vec<SymbolTableEntry> =
-                self.read_table_entries((header.size / header.entrie_size) as u16, header.offset)?;
+                self.read_table_entries((header.size / header.entry_size) as u16, header.offset)?;
 
-            for entry in entries[1..]
+            for entry in entries[1..] // ALEX: please add some comments as to why we iterate this way (why start at 1?)
                 .iter()
                 .filter(|e| LABEL_TYPES.contains(&(e.info & 0xf)))
             {
@@ -105,6 +105,8 @@ impl ELFFile {
                     }
                 }
             }
+
+            // ALEX: maybe we can sit together and rewrite this in a more functional style, nested loops are a bit unfortunate
         }
         Ok(labels)
     }
