@@ -1,18 +1,14 @@
-use std::{ops::Range, iter::StepBy, fmt::Display, mem::transmute};
+use std::{fmt::Display, iter::StepBy, mem::transmute, ops::Range};
 
 use super::{
-    SimulatedCPU, ARMv5CPU, names::{RegNames, FlagNames}, SimulationException,
-    operands::{
-        ShifterOperand, AddressingMode, 
-        AddressingModeMultiple, BranchOperator
-    }, 
-    SimulationExceptionKind
+    names::{FlagNames, RegNames},
+    operands::{AddressingMode, AddressingModeMultiple, BranchOperator, ShifterOperand},
+    ARMv5CPU, SimulatedCPU, SimulationException, SimulationExceptionKind,
 };
-use crate::utils::{
-    slice_to_u32, BitAccess, slice_to_u16, u32_to_array, u16_to_array, Memory
-};
+use crate::utils::{slice_to_u16, slice_to_u32, u16_to_array, u32_to_array, BitAccess, Memory};
 
-pub trait Instruction<C: SimulatedCPU<S>, S>: Display { // ALEX: this is where you asked, right? This could be reorganized, but we should sit down together after I've had more time with the codebase
+pub trait Instruction<C: SimulatedCPU<S>, S>: Display {
+    // ALEX: this is where you asked, right? This could be reorganized, but we should sit down together after I've had more time with the codebase
     fn execute(&self, cpu: &mut C) -> Result<(), SimulationException>;
 }
 
@@ -21,8 +17,23 @@ pub trait Instruction<C: SimulatedCPU<S>, S>: Display { // ALEX: this is where y
 #[repr(u32)]
 #[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq)]
-pub enum Condition { 
-    EQ, NE, HS, LO, MI, PL, VS, VC, HI, LS, GE, LT, GT, LE, AL, Unconditional
+pub enum Condition {
+    EQ,
+    NE,
+    HS,
+    LO,
+    MI,
+    PL,
+    VS,
+    VC,
+    HI,
+    LS,
+    GE,
+    LT,
+    GT,
+    LE,
+    AL,
+    Unconditional,
 }
 impl Condition {
     pub(super) fn from_instruction(instruction: u32) -> Condition {
@@ -51,7 +62,7 @@ impl Condition {
             Condition::LT => n != v,
             Condition::GT => !z && (n == v),
             Condition::LE => z || (n != v),
-            _ => true
+            _ => true,
         }
     }
 }
@@ -59,9 +70,8 @@ impl Display for Condition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Condition::AL | Condition::Unconditional = self {
             write!(f, "")
-        }
-        else {
-            write!(f, "{self:?}")   
+        } else {
+            write!(f, "{self:?}")
         }
     }
 }
@@ -70,8 +80,22 @@ impl Display for Condition {
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ARMv5DataProcessingOperation {
-    AND, EOR, SUB, RSB, ADD, ADC, SBC, RSC,
-    TST, TEQ, CMP, CMN, ORR, MOV, BIC, MVN
+    AND,
+    EOR,
+    SUB,
+    RSB,
+    ADD,
+    ADC,
+    SBC,
+    RSC,
+    TST,
+    TEQ,
+    CMP,
+    CMN,
+    ORR,
+    MOV,
+    BIC,
+    MVN,
 }
 impl ARMv5DataProcessingOperation {
     const NUM_OPERATIONS: u32 = 16;
@@ -86,86 +110,137 @@ impl ARMv5DataProcessingOperation {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ARMv5MultiplyOperation {
-    MUL, MLA, SMULL, UMULL, SMLAL, UMLAL
+    MUL,
+    MLA,
+    SMULL,
+    UMULL,
+    SMLAL,
+    UMLAL,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ARMv5MiscellaneousOperation {
-    CLZ
+    CLZ,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ARMv5BranchOperation {
-    B, BL, BX, BLX
+    B,
+    BL,
+    BX,
+    BLX,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ARMv5LoadStoreOperation {
-    LDR, LDRB, LDRBT, LDRH, LDRSB, LDRSH, 
-    LDRT, STR, STRB, STRBT, STRH, STRT
+    LDR,
+    LDRB,
+    LDRBT,
+    LDRH,
+    LDRSB,
+    LDRSH,
+    LDRT,
+    STR,
+    STRB,
+    STRBT,
+    STRH,
+    STRT,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ARMv5LoadStoreMultipleOperation {
-    LDM, STM
+    LDM,
+    STM,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum ARMv5SynchronizationOperation {
-    SWP, SWPB
+    SWP,
+    SWPB,
 }
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ARMv5GenericOperation {
-    SWI, BKPT, MRS, MSR, CDP, CDP2, LDC, 
-    LDC2, MCR, MCR2, MRC, MRC2, STC, STC2
+    SWI,
+    BKPT,
+    MRS,
+    MSR,
+    CDP,
+    CDP2,
+    LDC,
+    LDC2,
+    MCR,
+    MCR2,
+    MRC,
+    MRC2,
+    STC,
+    STC2,
 }
 
 //maybe add undefined
 #[derive(Debug, PartialEq, Eq)]
 pub enum ARMv5InstructionType {
-    DataProcessing { 
-        op: ARMv5DataProcessingOperation, s: bool, rn: RegNames, 
-        rd: RegNames, so: ShifterOperand 
+    DataProcessing {
+        op: ARMv5DataProcessingOperation,
+        s: bool,
+        rn: RegNames,
+        rd: RegNames,
+        so: ShifterOperand,
     },
-    Multiply { 
-        op: ARMv5MultiplyOperation, s:bool, rn_lo: RegNames, 
-        rd_hi: RegNames, rs: RegNames, rm: RegNames 
+    Multiply {
+        op: ARMv5MultiplyOperation,
+        s: bool,
+        rn_lo: RegNames,
+        rd_hi: RegNames,
+        rs: RegNames,
+        rm: RegNames,
     },
-    Miscellaneous { 
-        op: ARMv5MiscellaneousOperation, rd: RegNames, rm: RegNames 
+    Miscellaneous {
+        op: ARMv5MiscellaneousOperation,
+        rd: RegNames,
+        rm: RegNames,
     },
-    Branch { 
-        op: ARMv5BranchOperation, bo: BranchOperator
+    Branch {
+        op: ARMv5BranchOperation,
+        bo: BranchOperator,
     },
     LoadStore {
-        op: ARMv5LoadStoreOperation, rd: RegNames, am: AddressingMode
+        op: ARMv5LoadStoreOperation,
+        rd: RegNames,
+        am: AddressingMode,
     },
     LoadStoreMultiple {
-         op: ARMv5LoadStoreMultipleOperation, amm: AddressingModeMultiple
+        op: ARMv5LoadStoreMultipleOperation,
+        amm: AddressingModeMultiple,
     },
     Synchronization {
-        op: ARMv5SynchronizationOperation, rn: RegNames, 
-        rd:RegNames, rm: RegNames
+        op: ARMv5SynchronizationOperation,
+        rn: RegNames,
+        rd: RegNames,
+        rm: RegNames,
     },
-    Generic { 
-        op: ARMv5GenericOperation },
-    Undefined
+    Generic {
+        op: ARMv5GenericOperation,
+    },
+    Undefined,
 }
 
 //maybe provide constructor
 #[derive(Debug, PartialEq, Eq)]
 pub struct ARMv5Instruction {
     pub condition: Condition,
-    pub instruction_type: ARMv5InstructionType
+    pub instruction_type: ARMv5InstructionType,
 }
 impl Instruction<ARMv5CPU, i32> for ARMv5Instruction {
     fn execute(&self, cpu: &mut ARMv5CPU) -> Result<(), SimulationException> {
-        if !self.condition.is_satisfied(&cpu.flags) { return Ok(()); }
+        if !self.condition.is_satisfied(&cpu.flags) {
+            return Ok(());
+        }
 
         match &self.instruction_type {
             ARMv5InstructionType::DataProcessing { op, s, rn, rd, so } => {
                 let function = match op {
+                    // ALEX: very nice design :) Maybe we can create a macro to reduce the boilerplate?
                     ARMv5DataProcessingOperation::AND => ARMv5CPU::and,
                     ARMv5DataProcessingOperation::EOR => ARMv5CPU::eor,
                     ARMv5DataProcessingOperation::SUB => ARMv5CPU::sub,
@@ -181,34 +256,39 @@ impl Instruction<ARMv5CPU, i32> for ARMv5Instruction {
                     ARMv5DataProcessingOperation::ORR => ARMv5CPU::orr,
                     ARMv5DataProcessingOperation::MOV => ARMv5CPU::mov,
                     ARMv5DataProcessingOperation::BIC => ARMv5CPU::bic,
-                    ARMv5DataProcessingOperation::MVN => ARMv5CPU::mvn
+                    ARMv5DataProcessingOperation::MVN => ARMv5CPU::mvn,
                 };
                 function(cpu, *s, *rn, *rd, *so)
             }
-            ARMv5InstructionType::Multiply { op, s, rd_hi, rn_lo, rs, rm } => {
+            ARMv5InstructionType::Multiply {
+                op,
+                s,
+                rd_hi,
+                rn_lo,
+                rs,
+                rm,
+            } => {
                 let function = match op {
                     ARMv5MultiplyOperation::MUL => ARMv5CPU::mul,
                     ARMv5MultiplyOperation::MLA => ARMv5CPU::mla,
                     ARMv5MultiplyOperation::SMULL => ARMv5CPU::smull,
                     ARMv5MultiplyOperation::UMULL => ARMv5CPU::umull,
                     ARMv5MultiplyOperation::SMLAL => ARMv5CPU::smlal,
-                    ARMv5MultiplyOperation::UMLAL => ARMv5CPU::umlal
+                    ARMv5MultiplyOperation::UMLAL => ARMv5CPU::umlal,
                 };
                 function(cpu, *s, *rd_hi, *rn_lo, *rs, *rm)
-            },
+            }
             ARMv5InstructionType::Miscellaneous { op, rd, rm } => {
                 let function = match op {
-                    ARMv5MiscellaneousOperation::CLZ => ARMv5CPU::clz
+                    ARMv5MiscellaneousOperation::CLZ => ARMv5CPU::clz,
                 };
                 function(cpu, *rd, *rm)
-            },
-            ARMv5InstructionType::Branch { op, bo } => {
-                match op {
-                    ARMv5BranchOperation::B => ARMv5CPU::b(cpu, false, bo),
-                    ARMv5BranchOperation::BL => ARMv5CPU::b(cpu, true, bo),
-                    ARMv5BranchOperation::BX => ARMv5CPU::bx(cpu, false, bo),
-                    ARMv5BranchOperation::BLX => ARMv5CPU::bx(cpu, true, bo)
-                }
+            }
+            ARMv5InstructionType::Branch { op, bo } => match op {
+                ARMv5BranchOperation::B => ARMv5CPU::b(cpu, false, bo),
+                ARMv5BranchOperation::BL => ARMv5CPU::b(cpu, true, bo),
+                ARMv5BranchOperation::BX => ARMv5CPU::bx(cpu, false, bo),
+                ARMv5BranchOperation::BLX => ARMv5CPU::bx(cpu, true, bo),
             },
             ARMv5InstructionType::LoadStore { op, rd, am } => {
                 let function = match op {
@@ -223,24 +303,24 @@ impl Instruction<ARMv5CPU, i32> for ARMv5Instruction {
                     ARMv5LoadStoreOperation::STRB => ARMv5CPU::strb,
                     ARMv5LoadStoreOperation::STRBT => ARMv5CPU::strbt,
                     ARMv5LoadStoreOperation::STRH => ARMv5CPU::strh,
-                    ARMv5LoadStoreOperation::STRT => ARMv5CPU::strt
+                    ARMv5LoadStoreOperation::STRT => ARMv5CPU::strt,
                 };
                 function(cpu, *rd, *am)
-            },
+            }
             ARMv5InstructionType::LoadStoreMultiple { op, amm } => {
                 let function = match op {
                     ARMv5LoadStoreMultipleOperation::LDM => ARMv5CPU::ldm,
-                    ARMv5LoadStoreMultipleOperation::STM => ARMv5CPU::stm
+                    ARMv5LoadStoreMultipleOperation::STM => ARMv5CPU::stm,
                 };
                 function(cpu, *amm)
-            },
+            }
             ARMv5InstructionType::Synchronization { op, rn, rd, rm } => {
                 let function = match op {
                     ARMv5SynchronizationOperation::SWP => ARMv5CPU::swp,
                     ARMv5SynchronizationOperation::SWPB => ARMv5CPU::swpb,
                 };
                 function(cpu, *rn, *rd, *rm)
-            },
+            }
             ARMv5InstructionType::Generic { op } => {
                 let function = match op {
                     ARMv5GenericOperation::SWI => ARMv5CPU::swi,
@@ -256,14 +336,14 @@ impl Instruction<ARMv5CPU, i32> for ARMv5Instruction {
                     ARMv5GenericOperation::MRC => ARMv5CPU::mrc,
                     ARMv5GenericOperation::MRC2 => ARMv5CPU::mrc2,
                     ARMv5GenericOperation::STC => ARMv5CPU::stc,
-                    ARMv5GenericOperation::STC2 => ARMv5CPU::stc2
+                    ARMv5GenericOperation::STC2 => ARMv5CPU::stc2,
                 };
                 function(cpu)
             }
             ARMv5InstructionType::Undefined => Err(SimulationException {
                 kind: SimulationExceptionKind::UndefinedInstruction,
-                msg: "Trying to execute undefined Instruction!\n".to_string()
-            })
+                msg: "Trying to execute undefined Instruction!\n".to_string(), // ALEX: please also specify the instruction
+            }),
         }
     }
 }
@@ -272,70 +352,75 @@ impl Display for ARMv5Instruction {
         let cond: &Condition = &self.condition;
         match &self.instruction_type {
             ARMv5InstructionType::DataProcessing { op, s, rn, rd, so } => {
-                let s: &str = if *s {"S"} else {""};
+                let s: &str = if *s { "S" } else { "" };
                 match op {
-                    ARMv5DataProcessingOperation::TST |
-                    ARMv5DataProcessingOperation::TEQ |
-                    ARMv5DataProcessingOperation::CMP |
-                    ARMv5DataProcessingOperation::CMN |
-                    ARMv5DataProcessingOperation::MOV |
-                    ARMv5DataProcessingOperation::MVN => write!(
-                        f, "{:?}{cond}{s} {rd}, {so}", op
-                    ),
-                    _ => write!(
-                        f, "{:?}{cond}{s} {rd}, {rn}, {so}", op
-                    )
+                    ARMv5DataProcessingOperation::TST
+                    | ARMv5DataProcessingOperation::TEQ
+                    | ARMv5DataProcessingOperation::CMP
+                    | ARMv5DataProcessingOperation::CMN
+                    | ARMv5DataProcessingOperation::MOV
+                    | ARMv5DataProcessingOperation::MVN => {
+                        write!(f, "{:?}{cond}{s} {rd}, {so}", op)
+                    }
+                    _ => write!(f, "{:?}{cond}{s} {rd}, {rn}, {so}", op),
                 }
-            },
-            ARMv5InstructionType::Multiply { op, s, rn_lo, rd_hi, rs, rm } => {
-                let s: &str = if *s {"S"} else {""};
+            }
+            ARMv5InstructionType::Multiply {
+                op,
+                s,
+                rn_lo,
+                rd_hi,
+                rs,
+                rm,
+            } => {
+                let s: &str = if *s { "S" } else { "" };
                 match op {
-                    ARMv5MultiplyOperation::MUL => write!(
-                        f, "{:?}{cond}{s} {rd_hi}, {rm}, {rs}", op
-                    ),
-                    ARMv5MultiplyOperation::MLA => write!(
-                        f, "{:?}{cond}{s} {rd_hi}, {rm}, {rs}, {rn_lo}", op
-                    ),
-                    _ => write!(
-                        f, "{:?}{cond}{s} {rd_hi}, {rn_lo}, {rm}, {rs}", op
-                    )
+                    ARMv5MultiplyOperation::MUL => {
+                        write!(f, "{:?}{cond}{s} {rd_hi}, {rm}, {rs}", op)
+                    }
+                    ARMv5MultiplyOperation::MLA => {
+                        write!(f, "{:?}{cond}{s} {rd_hi}, {rm}, {rs}, {rn_lo}", op)
+                    }
+                    _ => write!(f, "{:?}{cond}{s} {rd_hi}, {rn_lo}, {rm}, {rs}", op),
                 }
-            },
+            }
             ARMv5InstructionType::Miscellaneous { op, rd, rm } => {
                 write!(f, "{:?}{cond} {rd}, {rm}", op)
-            },
-            ARMv5InstructionType::Branch { op, bo } => {
-                match bo {
-                    BranchOperator::Register(reg) => {
-                        write!(f, "{op:?}{cond} {reg}") 
-                    },
-                    BranchOperator::Offset(offset, ..) => {
-                        write!(f, "{op:?}{cond} 0x{offset:x}")
-                    },
+            }
+            ARMv5InstructionType::Branch { op, bo } => match bo {
+                BranchOperator::Register(reg) => {
+                    write!(f, "{op:?}{cond} {reg}")
+                }
+                BranchOperator::Offset(offset, ..) => {
+                    write!(f, "{op:?}{cond} 0x{offset:x}")
                 }
             },
             // not correct -> str[condition][b][t]
             ARMv5InstructionType::LoadStore { op, rd, am } => {
                 write!(f, "{:?}{cond} {rd}, {am}", op)
-            },
+            }
             ARMv5InstructionType::LoadStoreMultiple { op, amm } => {
                 write!(f, "{:?}{cond}{amm}", op)
-            },
+            }
             // not correct -> swp[condition][b]
             ARMv5InstructionType::Synchronization { op, rn, rd, rm } => {
                 write!(f, "{:?}{cond} {rd} {rm} {rn}", op)
-            },
+            }
             ARMv5InstructionType::Generic { op } => {
                 write!(f, "{:?} #0", op)
             }
-            ARMv5InstructionType::Undefined => write!(f, "?")
+            ARMv5InstructionType::Undefined => write!(f, "?"),
         }
     }
 }
 
 impl ARMv5CPU {
     fn and(
-        &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
+        &mut self,
+        s: bool,
+        rn: RegNames,
+        rd: RegNames,
+        so: ShifterOperand,
     ) -> Result<(), SimulationException> {
         let a: i32 = self.get_register_intern(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
@@ -353,7 +438,11 @@ impl ARMv5CPU {
     }
 
     fn eor(
-        &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
+        &mut self,
+        s: bool,
+        rn: RegNames,
+        rd: RegNames,
+        so: ShifterOperand,
     ) -> Result<(), SimulationException> {
         let a: i32 = self.get_register_intern(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
@@ -371,12 +460,16 @@ impl ARMv5CPU {
     }
 
     fn sub(
-        &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
+        &mut self,
+        s: bool,
+        rn: RegNames,
+        rd: RegNames,
+        so: ShifterOperand,
     ) -> Result<(), SimulationException> {
         let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
-        let (result,  overflow): (i32, bool) = a.overflowing_sub(b);
+        let (result, overflow): (i32, bool) = a.overflowing_sub(b);
         self.set_register(rd, result);
 
         if s {
@@ -390,12 +483,16 @@ impl ARMv5CPU {
     }
 
     fn rsb(
-        &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
+        &mut self,
+        s: bool,
+        rn: RegNames,
+        rd: RegNames,
+        so: ShifterOperand,
     ) -> Result<(), SimulationException> {
         let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
-        let (result,  overflow): (i32, bool) = b.overflowing_sub(a);
+        let (result, overflow): (i32, bool) = b.overflowing_sub(a);
         self.set_register(rd, result);
 
         if s {
@@ -409,12 +506,16 @@ impl ARMv5CPU {
     }
 
     fn add(
-        &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
+        &mut self,
+        s: bool,
+        rn: RegNames,
+        rd: RegNames,
+        so: ShifterOperand,
     ) -> Result<(), SimulationException> {
         let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
-        let (result,  overflow): (i32, bool) = a.overflowing_add(b);
+        let (result, overflow): (i32, bool) = a.overflowing_add(b);
         self.set_register(rd, result);
 
         if s {
@@ -427,13 +528,16 @@ impl ARMv5CPU {
         Ok(())
     }
 
-
     fn adc(
-        &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
+        &mut self,
+        s: bool,
+        rn: RegNames,
+        rd: RegNames,
+        so: ShifterOperand,
     ) -> Result<(), SimulationException> {
         let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
-        let c: i32 = if self.flags[FlagNames::C] {1} else {0};
+        let c: i32 = if self.flags[FlagNames::C] { 1 } else { 0 };
 
         // carrying_add not available yet
         let (ir, o1): (i32, bool) = (a).overflowing_add(b);
@@ -443,8 +547,7 @@ impl ARMv5CPU {
         if s {
             self.flags[FlagNames::N] = result < 0;
             self.flags[FlagNames::Z] = result == 0;
-            self.flags[FlagNames::C] 
-                = (result as u32) <= (a as u32) && (b != 0 || c != 0);
+            self.flags[FlagNames::C] = (result as u32) <= (a as u32) && (b != 0 || c != 0);
             self.flags[FlagNames::V] = o1 || o2;
         }
 
@@ -452,11 +555,15 @@ impl ARMv5CPU {
     }
 
     fn sbc(
-        &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
+        &mut self,
+        s: bool,
+        rn: RegNames,
+        rd: RegNames,
+        so: ShifterOperand,
     ) -> Result<(), SimulationException> {
         let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
-        let c: i32 = if self.flags[FlagNames::C] {0} else {1};
+        let c: i32 = if self.flags[FlagNames::C] { 0 } else { 1 };
 
         let (ir, o1): (i32, bool) = a.overflowing_sub(b);
         let (result, o2): (i32, bool) = ir.overflowing_sub(c);
@@ -465,8 +572,7 @@ impl ARMv5CPU {
         if s {
             self.flags[FlagNames::N] = result < 0;
             self.flags[FlagNames::Z] = result == 0;
-            self.flags[FlagNames::C] = 
-                (result as u32) <= (a as u32) && (b != 0 || c != 0);
+            self.flags[FlagNames::C] = (result as u32) <= (a as u32) && (b != 0 || c != 0);
             self.flags[FlagNames::V] = o1 || o2;
         }
 
@@ -474,11 +580,15 @@ impl ARMv5CPU {
     }
 
     fn rsc(
-        &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
+        &mut self,
+        s: bool,
+        rn: RegNames,
+        rd: RegNames,
+        so: ShifterOperand,
     ) -> Result<(), SimulationException> {
         let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
-        let c: i32 = if self.flags[FlagNames::C] {0} else {1};
+        let c: i32 = if self.flags[FlagNames::C] { 0 } else { 1 };
 
         let (ir, o1): (i32, bool) = b.overflowing_sub(a);
         let (result, o2): (i32, bool) = ir.overflowing_sub(c);
@@ -487,8 +597,7 @@ impl ARMv5CPU {
         if s {
             self.flags[FlagNames::N] = result < 0;
             self.flags[FlagNames::Z] = result == 0;
-            self.flags[FlagNames::C] = 
-                (result as u32) <= (b as u32) && (a != 0 || c != 0);
+            self.flags[FlagNames::C] = (result as u32) <= (b as u32) && (a != 0 || c != 0);
             self.flags[FlagNames::V] = o1 || o2;
         }
 
@@ -496,7 +605,11 @@ impl ARMv5CPU {
     }
 
     fn tst(
-        &mut self, _: bool, rn: RegNames, _: RegNames, so: ShifterOperand
+        &mut self,
+        _: bool,
+        rn: RegNames,
+        _: RegNames,
+        so: ShifterOperand,
     ) -> Result<(), SimulationException> {
         let a: i32 = self.get_register_intern(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
@@ -511,7 +624,11 @@ impl ARMv5CPU {
     }
 
     fn teq(
-        &mut self, _: bool, rn: RegNames, _: RegNames, so: ShifterOperand
+        &mut self,
+        _: bool,
+        rn: RegNames,
+        _: RegNames,
+        so: ShifterOperand,
     ) -> Result<(), SimulationException> {
         let a: i32 = self.get_register_intern(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
@@ -526,12 +643,16 @@ impl ARMv5CPU {
     }
 
     fn cmp(
-        &mut self, _: bool, rn: RegNames, _: RegNames, so: ShifterOperand
+        &mut self,
+        _: bool,
+        rn: RegNames,
+        _: RegNames,
+        so: ShifterOperand,
     ) -> Result<(), SimulationException> {
         let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
-        let (result,  overflow): (i32, bool) = a.overflowing_sub(b);
+        let (result, overflow): (i32, bool) = a.overflowing_sub(b);
 
         self.flags[FlagNames::N] = result < 0;
         self.flags[FlagNames::Z] = result == 0;
@@ -542,12 +663,16 @@ impl ARMv5CPU {
     }
 
     fn cmn(
-        &mut self, _: bool, rn: RegNames, _: RegNames, so: ShifterOperand
+        &mut self,
+        _: bool,
+        rn: RegNames,
+        _: RegNames,
+        so: ShifterOperand,
     ) -> Result<(), SimulationException> {
         let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
-        let (result,  overflow): (i32, bool) = a.overflowing_add(b);
+        let (result, overflow): (i32, bool) = a.overflowing_add(b);
 
         self.flags[FlagNames::N] = result < 0;
         self.flags[FlagNames::Z] = result == 0;
@@ -558,7 +683,11 @@ impl ARMv5CPU {
     }
 
     fn orr(
-        &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
+        &mut self,
+        s: bool,
+        rn: RegNames,
+        rd: RegNames,
+        so: ShifterOperand,
     ) -> Result<(), SimulationException> {
         let a: i32 = self.get_register_intern(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
@@ -576,7 +705,11 @@ impl ARMv5CPU {
     }
 
     fn mov(
-        &mut self, s: bool, _: RegNames, rd: RegNames, so: ShifterOperand
+        &mut self,
+        s: bool,
+        _: RegNames,
+        rd: RegNames,
+        so: ShifterOperand,
     ) -> Result<(), SimulationException> {
         let (value, carry): (i32, bool) = self.perform_shift(so);
         self.set_register(rd, value);
@@ -591,7 +724,11 @@ impl ARMv5CPU {
     }
 
     fn bic(
-        &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
+        &mut self,
+        s: bool,
+        rn: RegNames,
+        rd: RegNames,
+        so: ShifterOperand,
     ) -> Result<(), SimulationException> {
         let a: i32 = self.get_register_intern(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
@@ -609,7 +746,11 @@ impl ARMv5CPU {
     }
 
     fn mvn(
-        &mut self, s: bool, _: RegNames, rd: RegNames, so: ShifterOperand
+        &mut self,
+        s: bool,
+        _: RegNames,
+        rd: RegNames,
+        so: ShifterOperand,
     ) -> Result<(), SimulationException> {
         let (value, carry): (i32, bool) = self.perform_shift(so);
         let result: i32 = !value;
@@ -624,11 +765,14 @@ impl ARMv5CPU {
         Ok(())
     }
 
-
     // Multiply instructions
     fn mul(
-        &mut self, s: bool, rd: RegNames, _: RegNames,
-        rs: RegNames, rm: RegNames 
+        &mut self,
+        s: bool,
+        rd: RegNames,
+        _: RegNames,
+        rs: RegNames,
+        rm: RegNames,
     ) -> Result<(), SimulationException> {
         let a: i32 = self.get_register_intern(rm);
         let b: i32 = self.get_register_intern(rs);
@@ -645,8 +789,12 @@ impl ARMv5CPU {
     }
 
     fn mla(
-        &mut self, s: bool, rd: RegNames, rn: RegNames, 
-        rs: RegNames, rm: RegNames 
+        &mut self,
+        s: bool,
+        rd: RegNames,
+        rn: RegNames,
+        rs: RegNames,
+        rm: RegNames,
     ) -> Result<(), SimulationException> {
         let a: i32 = self.get_register_intern(rm);
         let b: i32 = self.get_register_intern(rs);
@@ -664,8 +812,12 @@ impl ARMv5CPU {
     }
 
     fn smull(
-        &mut self, s: bool, rdhi: RegNames, rdlo: RegNames,
-        rs: RegNames, rm: RegNames
+        &mut self,
+        s: bool,
+        rdhi: RegNames,
+        rdlo: RegNames,
+        rs: RegNames,
+        rm: RegNames,
     ) -> Result<(), SimulationException> {
         let a: i64 = self.get_register_intern(rm) as i64;
         let b: i64 = self.get_register_intern(rs) as i64;
@@ -682,9 +834,13 @@ impl ARMv5CPU {
         Ok(())
     }
 
-    fn umull(        
-        &mut self, s: bool, rdhi: RegNames, rdlo: RegNames,
-        rs: RegNames, rm: RegNames
+    fn umull(
+        &mut self,
+        s: bool,
+        rdhi: RegNames,
+        rdlo: RegNames,
+        rs: RegNames,
+        rm: RegNames,
     ) -> Result<(), SimulationException> {
         let a: u64 = self.get_register_intern(rm) as u32 as u64;
         let b: u64 = self.get_register_intern(rs) as u32 as u64;
@@ -703,12 +859,16 @@ impl ARMv5CPU {
     }
 
     fn smlal(
-        &mut self, s: bool, rdhi: RegNames, rdlo: RegNames,
-        rs: RegNames, rm: RegNames
+        &mut self,
+        s: bool,
+        rdhi: RegNames,
+        rdlo: RegNames,
+        rs: RegNames,
+        rm: RegNames,
     ) -> Result<(), SimulationException> {
         let a: i64 = self.get_register_intern(rm) as i64;
         let b: i64 = self.get_register_intern(rs) as i64;
-        let c: i64 = (self.get_register_intern(rdlo) as i64) 
+        let c: i64 = (self.get_register_intern(rdlo) as i64)
             + ((self.get_register_intern(rdhi) as i64) << 32);
 
         let result: i64 = a.wrapping_mul(b).wrapping_add(c);
@@ -724,12 +884,16 @@ impl ARMv5CPU {
     }
 
     fn umlal(
-        &mut self, s: bool, rdhi: RegNames, rdlo: RegNames,
-        rs: RegNames, rm: RegNames
+        &mut self,
+        s: bool,
+        rdhi: RegNames,
+        rdlo: RegNames,
+        rs: RegNames,
+        rm: RegNames,
     ) -> Result<(), SimulationException> {
         let a: u64 = self.get_register_intern(rm) as u32 as u64;
         let b: u64 = self.get_register_intern(rs) as u32 as u64;
-        let c: i64 = (self.get_register_intern(rdlo) as i64) 
+        let c: i64 = (self.get_register_intern(rdlo) as i64)
             + ((self.get_register_intern(rdhi) as i64) << 32);
 
         let result: i64 = (a.wrapping_mul(b) as i64).wrapping_add(c);
@@ -744,17 +908,15 @@ impl ARMv5CPU {
         Ok(())
     }
 
-
     // Miscellaneous arithmetic instructions
     fn clz(&mut self, rd: RegNames, rm: RegNames) -> Result<(), SimulationException> {
         let a: i32 = self.get_register_intern(rm);
 
         let result: i32 = a.leading_zeros() as i32;
         self.set_register(rd, result);
-        
+
         Ok(())
     }
-    
 
     // Branch instructions
     fn b(&mut self, l: bool, bo: &BranchOperator) -> Result<(), SimulationException> {
@@ -769,7 +931,7 @@ impl ARMv5CPU {
             BranchOperator::Offset(offset, ..) => {
                 let new_prog_addr: i32 = prog_addr.wrapping_add(offset << 2);
                 self.set_register(RegNames::PC, new_prog_addr);
-            },
+            }
             BranchOperator::Register(_) => {
                 panic!("Instruction B does not work with a register!");
             }
@@ -778,11 +940,14 @@ impl ARMv5CPU {
         Ok(())
     }
 
-
-
     fn bx(&mut self, l: bool, bo: &BranchOperator) -> Result<(), SimulationException> {
+        // ALEX: please ensure that all functions and variables have descriptive names.
+        // ALEX: you may know what they are now, but not the person maintaining the code 2 years from now
+        // EDIT: the function names match the operators, my bad. Please still improve the variable naming
+
         let prog_addr: i32 = self.get_register_intern(RegNames::PC);
-        // This behaviour is incorrect! After switching to 
+
+        // WARNING: This behaviour is incorrect! After switching to
         // Thumb state on a non T CPU the next executed instruction
         // causes an UndefinedInstructionExeption. Then the cpu
         // switches back to ARM.
@@ -796,10 +961,9 @@ impl ARMv5CPU {
                 if !l {
                     panic!("Instruction BX does not work with an offset!");
                 }
-                let new_prog_addr: i32 = 
-                    prog_addr.wrapping_add((offset << 2) | ((*h as i32) << 1));
+                let new_prog_addr: i32 = prog_addr.wrapping_add((offset << 2) | ((*h as i32) << 1));
                 self.set_register(RegNames::PC, new_prog_addr);
-            },
+            }
             BranchOperator::Register(rm) => {
                 let target: i32 = self.get_register_intern(*rm);
                 self.set_register(RegNames::PC, target);
@@ -808,7 +972,6 @@ impl ARMv5CPU {
 
         Ok(())
     }
-
 
     // Load and store instructions
     fn ldr(&mut self, rd: RegNames, am: AddressingMode) -> Result<(), SimulationException> {
@@ -838,7 +1001,7 @@ impl ARMv5CPU {
         Ok(())
     }
 
-    fn ldrbt(&mut self, rd: RegNames, am: AddressingMode) -> Result<(), SimulationException> { 
+    fn ldrbt(&mut self, rd: RegNames, am: AddressingMode) -> Result<(), SimulationException> {
         self.ldrb(rd, am)
     }
 
@@ -859,13 +1022,13 @@ impl ARMv5CPU {
 
     fn ldrsh(&mut self, rd: RegNames, am: AddressingMode) -> Result<(), SimulationException> {
         let address: u32 = self.compute_modify_address(am);
-        let bytes: &[u8] = self.get_memory(address, 2)?;//&self.memory[address..address+2];
+        let bytes: &[u8] = self.get_memory(address, 2)?; //&self.memory[address..address+2];
         let value: i32 = slice_to_u16(bytes, &self.encoding) as i16 as i32;
         self.set_register(rd, value);
         Ok(())
     }
 
-    fn ldrt(&mut self, rd: RegNames, am: AddressingMode) -> Result<(), SimulationException> { 
+    fn ldrt(&mut self, rd: RegNames, am: AddressingMode) -> Result<(), SimulationException> {
         self.ldr(rd, am)
     }
 
@@ -889,7 +1052,7 @@ impl ARMv5CPU {
         Ok(())
     }
 
-    fn strbt(&mut self, rd: RegNames, am: AddressingMode) -> Result<(), SimulationException> { 
+    fn strbt(&mut self, rd: RegNames, am: AddressingMode) -> Result<(), SimulationException> {
         self.strb(rd, am)
     }
 
@@ -898,20 +1061,19 @@ impl ARMv5CPU {
 
         let value: u16 = self.get_register_intern(rd) as u16;
         let bytes: [u8; 2] = u16_to_array(value, &self.encoding);
-        
+
         //self.memory.splice(address..address+2, bytes);
         self.set_memory(address, &bytes)?;
         Ok(())
     }
 
-    fn strt(&mut self, rd: RegNames, am: AddressingMode) -> Result<(), SimulationException> { 
+    fn strt(&mut self, rd: RegNames, am: AddressingMode) -> Result<(), SimulationException> {
         self.str(rd, am)
     }
 
     //do not change any register if data abourt (better then specification)
     fn ldm(&mut self, amm: AddressingModeMultiple) -> Result<(), SimulationException> {
-        let mut addresses: StepBy<Range<u32>> = 
-            self.compute_modify_address_multiple(&amm);
+        let mut addresses: StepBy<Range<u32>> = self.compute_modify_address_multiple(&amm);
 
         let mut values: [u32; 16] = [0; 16];
 
@@ -932,18 +1094,16 @@ impl ARMv5CPU {
         Ok(())
     }
 
-    //If the base register <Rn> is specified in <registers>, and base register write-back is specified,
+    //WARNING: If the base register <Rn> is specified in <registers>, and base register write-back is specified,
     //the final value of <Rn> is UNPREDICTABLE.
 
-
     fn stm(&mut self, amm: AddressingModeMultiple) -> Result<(), SimulationException> {
-        let mut addresses: StepBy<Range<u32>> = 
-            self.compute_modify_address_multiple(&amm);
-            
+        let mut addresses: StepBy<Range<u32>> = self.compute_modify_address_multiple(&amm);
+
         for i in 0..16 {
             if amm.register_list.get_bit(i) {
                 let address: u32 = addresses.next().unwrap() & 0xFFFFFFFC;
-                
+
                 let reg_name: RegNames = (i as u32).into();
                 let value: i32 = self.get_register_intern(reg_name);
 
@@ -963,23 +1123,28 @@ impl ARMv5CPU {
         let rot_bits: u32 = (address as u32).cut_bits(0..=1) * 8;
         address &= 0xFFFFFFFC;
 
-        let bytes: &[u8] = &self.memory[address..address+4];
+        let bytes: &[u8] = &self.memory[address..address + 4];
         let mut lv: u32 = slice_to_u32(bytes, &self.encoding);
         lv = lv.rotate_right(rot_bits);
 
         let sv: u32 = self.get_register_intern(rm) as u32;
         let bytes: [u8; 4] = u32_to_array(sv, &self.encoding);
-        self.memory.splice(address..address+4, bytes);
+        self.memory.splice(address..address + 4, bytes);
         self.set_register(rd, lv as i32);
         Ok(())
     }
 
-    fn swpb(&mut self, rn: RegNames, rd: RegNames, rm: RegNames) -> Result<(), SimulationException> {
+    fn swpb(
+        &mut self,
+        rn: RegNames,
+        rd: RegNames,
+        rm: RegNames,
+    ) -> Result<(), SimulationException> {
         let address: usize = self.get_register_intern(rn) as u32 as usize;
 
         let lv: u8 = self.memory[address];
         let sv: u8 = self.get_register_intern(rm) as u8;
-        
+
         self.memory[address] = sv;
         self.set_register(rd, lv as i32);
         Ok(())
@@ -991,123 +1156,121 @@ impl ARMv5CPU {
         let r7: i32 = self.get_register_intern(RegNames::R7);
         match (r0, r7) {
             (1, 4) => {
-                let l: usize = 
-                    self.get_register_intern(RegNames::R2) as u32 as usize;
-                let a: usize = 
-                    self.get_register_intern(RegNames::R1) as u32 as usize;
-                self.output_device.output(
-                    &String::from_utf8_lossy(&self.memory[a..a+l])
-                );
-            },
+                let l: usize = self.get_register_intern(RegNames::R2) as u32 as usize;
+                let a: usize = self.get_register_intern(RegNames::R1) as u32 as usize;
+                self.output_device
+                    .output(&String::from_utf8_lossy(&self.memory[a..a + l]));
+            }
             (x, 1) => self.exit_behaviour.exit(x),
-            (_, _) => ()
+            (_, _) => (),
         }
         Ok(())
     }
 
-    fn bkpt(&mut self) -> Result<(), SimulationException> { Ok(()) }
+    fn bkpt(&mut self) -> Result<(), SimulationException> {
+        Ok(())
+    }
 
     // Status register access instructions
     fn mrs(&mut self) -> Result<(), SimulationException> {
-        Err(SimulationException{
-            kind: SimulationExceptionKind::UnsupportedInstruction,  
-            msg: "Full status register not supported yet!\n".to_string()
+        Err(SimulationException {
+            kind: SimulationExceptionKind::UnsupportedInstruction,
+            msg: "Full status register not supported yet!\n".to_string(),
         })
     }
 
     fn msr(&mut self) -> Result<(), SimulationException> {
-        Err(SimulationException{
-            kind: SimulationExceptionKind::UnsupportedInstruction,  
-            msg: "Full status register not supported yet!\n".to_string()
+        Err(SimulationException {
+            kind: SimulationExceptionKind::UnsupportedInstruction,
+            msg: "Full status register not supported yet!\n".to_string(),
         })
     }
 
-
     // Coprocessor instructions
     fn cdp(&mut self) -> Result<(), SimulationException> {
-        Err(SimulationException{
-            kind: SimulationExceptionKind::UnsupportedInstruction,  
-            msg: "Coprocessor instructions not supported!\n".to_string()
+        Err(SimulationException {
+            kind: SimulationExceptionKind::UnsupportedInstruction,
+            msg: "Coprocessor instructions not supported!\n".to_string(),
         })
     }
 
     fn cdp2(&mut self) -> Result<(), SimulationException> {
-        Err(SimulationException{
-            kind: SimulationExceptionKind::UnsupportedInstruction,  
-            msg: "Coprocessor instructions not supported!\n".to_string()
+        Err(SimulationException {
+            kind: SimulationExceptionKind::UnsupportedInstruction,
+            msg: "Coprocessor instructions not supported!\n".to_string(),
         })
     }
 
     fn ldc(&mut self) -> Result<(), SimulationException> {
-        Err(SimulationException{
-            kind: SimulationExceptionKind::UnsupportedInstruction,  
-            msg: "Coprocessor instructions not supported!\n".to_string()
+        Err(SimulationException {
+            kind: SimulationExceptionKind::UnsupportedInstruction,
+            msg: "Coprocessor instructions not supported!\n".to_string(),
         })
     }
 
     fn ldc2(&mut self) -> Result<(), SimulationException> {
-        Err(SimulationException{
-            kind: SimulationExceptionKind::UnsupportedInstruction,  
-            msg: "Coprocessor instructions not supported!\n".to_string()
+        Err(SimulationException {
+            kind: SimulationExceptionKind::UnsupportedInstruction,
+            msg: "Coprocessor instructions not supported!\n".to_string(),
         })
     }
 
     fn mcr(&mut self) -> Result<(), SimulationException> {
-        Err(SimulationException{
-            kind: SimulationExceptionKind::UnsupportedInstruction,  
-            msg: "Coprocessor instructions not supported!\n".to_string()
+        Err(SimulationException {
+            kind: SimulationExceptionKind::UnsupportedInstruction,
+            msg: "Coprocessor instructions not supported!\n".to_string(),
         })
     }
 
     fn mcr2(&mut self) -> Result<(), SimulationException> {
-        Err(SimulationException{
-            kind: SimulationExceptionKind::UnsupportedInstruction,  
-            msg: "Coprocessor instructions not supported!\n".to_string()
+        Err(SimulationException {
+            kind: SimulationExceptionKind::UnsupportedInstruction,
+            msg: "Coprocessor instructions not supported!\n".to_string(),
         })
     }
 
     fn mrc(&mut self) -> Result<(), SimulationException> {
-        Err(SimulationException{
-            kind: SimulationExceptionKind::UnsupportedInstruction,  
-            msg: "Coprocessor instructions not supported!\n".to_string()
+        Err(SimulationException {
+            kind: SimulationExceptionKind::UnsupportedInstruction,
+            msg: "Coprocessor instructions not supported!\n".to_string(),
         })
     }
 
     fn mrc2(&mut self) -> Result<(), SimulationException> {
-        Err(SimulationException{
-            kind: SimulationExceptionKind::UnsupportedInstruction,  
-            msg: "Coprocessor instructions not supported!\n".to_string()
+        Err(SimulationException {
+            kind: SimulationExceptionKind::UnsupportedInstruction,
+            msg: "Coprocessor instructions not supported!\n".to_string(),
         })
     }
 
     fn stc(&mut self) -> Result<(), SimulationException> {
-        Err(SimulationException{
-            kind: SimulationExceptionKind::UnsupportedInstruction,  
-            msg: "Coprocessor instructions not supported!\n".to_string()
+        Err(SimulationException {
+            kind: SimulationExceptionKind::UnsupportedInstruction,
+            msg: "Coprocessor instructions not supported!\n".to_string(),
         })
     }
 
     fn stc2(&mut self) -> Result<(), SimulationException> {
-        Err(SimulationException{
-            kind: SimulationExceptionKind::UnsupportedInstruction,  
-            msg: "Coprocessor instructions not supported!\n".to_string()
+        Err(SimulationException {
+            kind: SimulationExceptionKind::UnsupportedInstruction,
+            msg: "Coprocessor instructions not supported!\n".to_string(),
         })
     }
 }
 
-#[cfg(test)]
+#[cfg(test)] // ALEX: again, please move tests to a separate file to reduce clutter
 mod tests {
-    use crate::utils::{T, F, ConsoleOutput, ConsoleExit, Endian};
     use crate::simulated_cpu::{
-        SimulatedCPU, ARMv5CPU, RegNames, FlagNames, 
         operands::{
-            ShifterOperand, barrel_shifter::ShiftType, 
-            AddressingMode, OffsetType, AddressingModeMultiple
-        }
+            barrel_shifter::ShiftType, AddressingMode, AddressingModeMultiple, OffsetType,
+            ShifterOperand,
+        },
+        ARMv5CPU, FlagNames, RegNames, SimulatedCPU,
     };
+    use crate::utils::{ConsoleExit, ConsoleOutput, Endian, F, T};
 
     macro_rules! data_processing_tests {
-        (function: $function:ident, $($test_name:ident: $test_values:expr),*) 
+        (function: $function:ident, $($test_name:ident: $test_values:expr),*)
         => {$(
             #[test]
             fn $test_name() {
@@ -1133,230 +1296,230 @@ mod tests {
 
     data_processing_tests! {
         function: and,
-        and_test_1: 
+        and_test_1:
             (0b1011101, 0b1101011, T, 0, T, 0b1001001, [F, F, T, F]),
-        and_test_2: 
+        and_test_2:
             (0b101010, 0b101010, T, 1, F, 0, [F, T, F, F]),
-        and_test_3: 
+        and_test_3:
             (i32::MIN, -1, T, 0, F, i32::MIN, [T, F, F, F]),
-        and_test_4: 
+        and_test_4:
             (-1, 4, T, 3, F, 0, [F, T, T, F]),
-        and_test_5: 
+        and_test_5:
             (1, 1, F, 1, F, 0, [F; 4])
     }
 
     data_processing_tests! {
         function: eor,
-        eor_test_1: 
+        eor_test_1:
             (0b1011101, 0b1101011, T, 0, T, 0b0110110, [F, F, T, F]),
-        eor_test_2: 
+        eor_test_2:
             (0b101010, 0b1010100, T, 1, F, 0, [F, T, F, F]),
-        eor_test_3: 
+        eor_test_3:
             (i32::MIN, 0, T, 0, F, i32::MIN, [T, F, F, F]),
-        eor_test_4: 
+        eor_test_4:
             (0, 4, T, 3, F, 0, [F, T, T, F]),
-        eor_test_5: 
+        eor_test_5:
             (0, 1, F, 1, F, 0, [F; 4])
     }
 
     data_processing_tests! {
         function: sub,
-        sub_test_1: 
+        sub_test_1:
             (5, 7, T, 0, T, -2, [T, F, F, F]),
-        sub_test_2: 
+        sub_test_2:
             (3, 3, T, 0, F, 0, [F, T, T, F]),
-        sub_test_3: 
+        sub_test_3:
             (i32::MIN, 1, T, 0, F, i32::MAX, [F, F, T, T]),
-        sub_test_4: 
+        sub_test_4:
             (10, 2, T, 1, F, 9, [F, F, T, F]),
-        sub_test_5: 
+        sub_test_5:
             (3, 3, F, 0, F, 0, [F; 4])
     }
 
     data_processing_tests! {
         function: rsb,
-        rsb_test_1: 
+        rsb_test_1:
             (7, 5, T, 0, T, -2, [T, F, F, F]),
-        rsb_test_2: 
+        rsb_test_2:
             (3, 3, T, 0, F, 0, [F, T, T, F]),
-        rsb_test_3: 
+        rsb_test_3:
             (1, i32::MIN, T, 0, F, i32::MAX, [F, F, T, T]),
-        rsb_test_4: 
+        rsb_test_4:
             (6, 16, T, 1, F, 2, [F, F, T, F]),
-        rsb_test_5: 
+        rsb_test_5:
             (3, 3, F, 0, F, 0, [F; 4])
     }
 
     data_processing_tests! {
         function: add,
-        add_test_1: 
+        add_test_1:
             (12, 7, T, 0, T, 19, [F; 4]),
-        add_test_2: 
+        add_test_2:
             (1, -1, T, 0, F, 0, [F, T, T, F]),
-        add_test_3: 
+        add_test_3:
             (i32::MAX, 2, T, 1, F, i32::MIN, [T, F, F, T]),
-        add_test_4: 
+        add_test_4:
             (i32::MIN, -1, T, 0, F, i32::MAX, [F, F, T, T]),
-        add_test_5: 
+        add_test_5:
             (1, -1, F, 0, F, 0, [F; 4])
     }
 
     data_processing_tests! {
         function: adc,
-        adc_test_1: 
+        adc_test_1:
             (12, 7, T, 0, F, 19, [F; 4]),
-        adc_test_2: 
+        adc_test_2:
             (1, -2, T, 0, T, 0, [F, T, T, F]),
-        adc_test_3: 
+        adc_test_3:
             (i32::MAX, 2, T, 1, T, i32::MIN + 1, [T, F, F, T]),
-        adc_test_4: 
+        adc_test_4:
             (i32::MIN, -1, T, 0, F, i32::MAX, [F, F, T, T]),
-        adc_test_5: 
+        adc_test_5:
             (1, -2, F, 0, T, 0, [F, F, T, F])
     }
 
     data_processing_tests! {
         function: sbc,
-        sbc_test_1: 
+        sbc_test_1:
             (5, 7, T, 0, T, -2, [T, F, F, F]),
         sbc_test_2:
             (3, 2, T, 0, F, 0, [F, T, T, F]),
-        sbc_test_3: 
+        sbc_test_3:
             (i32::MIN + 1, 1, T, 0, F, i32::MAX, [F, F, T, T]),
-        sbc_test_4: 
+        sbc_test_4:
             (10, 1, T, 1, T, 10, [F; 4]),
-        sbc_test_5: 
+        sbc_test_5:
             (3, 2, F, 0, F, 0, [F; 4])
     }
 
     data_processing_tests! {
         function: rsc,
-        rsc_test_1: 
+        rsc_test_1:
             (7, 5, T, 0, T, -2, [T, F, F, F]),
         rsc_test_2:
             (2, 3, T, 0, F, 0, [F, T, T, F]),
-        rsc_test_3: 
+        rsc_test_3:
             (1, i32::MIN + 1, T, 0, F, i32::MAX, [F, F, T, T]),
-        rsc_test_4: 
+        rsc_test_4:
             (1, 10, T, 1, T, 4, [F, F, T, F]),
-        rsc_test_5: 
+        rsc_test_5:
             (2, 3, F, 0, F, 0, [F; 4])
     }
 
     data_processing_tests! {
         function: tst,
-        tst_test_1: 
+        tst_test_1:
             (0b1011101, 0b1101011, T, 0, T, 0, [F, F, T, F]),
-        tst_test_2: 
+        tst_test_2:
             (0b101010, 0b101010, T, 1, F, 0, [F, T, F, F]),
-        tst_test_3: 
+        tst_test_3:
             (i32::MIN, -1, F, 0, T, 0, [T, F, T, F]),
-        tst_test_4: 
+        tst_test_4:
             (-1, 4, F, 3, F, 0, [F, T, T, F]),
-        tst_test_5: 
+        tst_test_5:
             (1, 1, T, 2, T, 0, [F, T, F, F])
     }
 
     data_processing_tests! {
         function: teq,
-        teq_test_1: 
+        teq_test_1:
             (0b1011101, 0b1101011, T, 0, T, 0, [F, F, T, F]),
-        teq_test_2: 
+        teq_test_2:
             (0b101010, 0b1010100, T, 1, F, 0, [F, T, F, F]),
-        teq_test_3: 
+        teq_test_3:
             (i32::MIN, 0, F, 0, T, 0, [T, F, T, F]),
-        teq_test_4: 
+        teq_test_4:
             (0, 4, F, 3, F, 0, [F, T, T, F]),
-        teq_test_5: 
+        teq_test_5:
             (0, 1, T, 2, T, 0, [F, T, F, F])
     }
 
     data_processing_tests! {
         function: cmp,
-        cmp_test_1: 
+        cmp_test_1:
             (5, 7, T, 0, T, 0, [T, F, F, F]),
-        cmp_test_2: 
+        cmp_test_2:
             (3, 3, T, 0, F, 0, [F, T, T, F]),
-        cmp_test_3: 
+        cmp_test_3:
             (i32::MIN, 1, F, 0, T, 0, [F, F, T, T]),
-        cmp_test_4: 
+        cmp_test_4:
             (10, 2, F, 1, F, 0, [F, F, T, F]),
-        cmp_test_5: 
+        cmp_test_5:
             (3, -3, T, 0, T, 0, [F; 4])
     }
 
     data_processing_tests! {
         function: cmn,
-        cmn_test_1: 
+        cmn_test_1:
             (12, 7, T, 0, T, 0, [F; 4]),
-        cmn_test_2: 
+        cmn_test_2:
             (1, -1, T, 0, F, 0, [F, T, T, F]),
-        cmn_test_3: 
+        cmn_test_3:
             (i32::MAX, 2, F, 1, F, 0, [T, F, F, T]),
-        cmn_test_4: 
+        cmn_test_4:
             (i32::MIN, -1, F, 0, T, 0, [F, F, T, T]),
-        cmn_test_5: 
+        cmn_test_5:
             (1, 1, T, 1, F, 0, [F; 4])
     }
 
     data_processing_tests! {
         function: orr,
-        orr_test_1: 
+        orr_test_1:
             (0b1011101, 0b1001001, T, 0, T, 0b1011101, [F, F, T, F]),
-        orr_test_2: 
+        orr_test_2:
             (0, 0, T, 1, F, 0, [F, T, F, F]),
-        orr_test_3: 
+        orr_test_3:
             (1, -1, T, 0, F, -1, [T, F, F, F]),
-        orr_test_4: 
+        orr_test_4:
             (i32::MIN, 4, T, 3, F, i32::MIN, [T, F, T, F]),
-        orr_test_5: 
+        orr_test_5:
             (0, 1, F, 1, F, 0, [F; 4])
     }
 
     data_processing_tests! {
         function: mov,
-        mov_test_1: 
+        mov_test_1:
             (-1, 23, T, 0, T, 23, [F, F, T, F]),
-        mov_test_2: 
+        mov_test_2:
             (-1, 7, T, 1, F, 3, [F, F, T, F]),
-        mov_test_3: 
+        mov_test_3:
             (-1, -30, T, 0, F, -30, [T, F, F, F]),
-        mov_test_4: 
+        mov_test_4:
             (-1, 3, T, 3, T, 0, [F, T, F, F]),
-        mov_test_5: 
+        mov_test_5:
             (-1, -30, F, 0, T, -30, [F, F, T, F])
     }
 
     data_processing_tests! {
         function: bic,
-        bic_test_1: 
+        bic_test_1:
             (0b1011101, 0b0010100, T, 0, T, 0b1001001, [F, F, T, F]),
-        bic_test_2: 
+        bic_test_2:
             (0b0101010, 0b1010100, T, 1, T, 0, [F, T, F, F]),
-        bic_test_3: 
+        bic_test_3:
             (i32::MIN, 0, T, 0, F, i32::MIN, [T, F, F, F]),
-        bic_test_4: 
+        bic_test_4:
             (1, 12, T, 3, F, 0, [F, T, T, F]),
-        bic_test_5: 
+        bic_test_5:
             (1, -2, F, 1, F, 0, [F; 4])
     }
 
     data_processing_tests! {
         function: mvn,
-        mvn_test_1: 
+        mvn_test_1:
             (-1, -24, T, 0, T, 23, [F, F, T, F]),
-        mvn_test_2: 
+        mvn_test_2:
             (-1, -1, T, 1, F, i32::MIN, [T, F, T, F]),
-        mvn_test_3: 
+        mvn_test_3:
             (-1, 30, T, 1, T, -16, [T, F, F, F]),
-        mvn_test_4: 
+        mvn_test_4:
             (-1, -1, T, 0, F, 0, [F, T, F, F]),
-        mvn_test_5: 
+        mvn_test_5:
             (-1, 29, F, 0, T, -30, [F, F, T, F])
     }
 
     macro_rules! multiply_tests {
-        (function: $function:ident, $($test_name:ident: $test_values:expr),*) 
+        (function: $function:ident, $($test_name:ident: $test_values:expr),*)
         => {$(
             #[test]
             fn $test_name() {
@@ -1368,7 +1531,7 @@ mod tests {
                 cpu.set_register(RegNames::R2, c);
                 cpu.set_register(RegNames::R3, d);
 
-                cpu.$function(s, RegNames::R3, 
+                cpu.$function(s, RegNames::R3,
                     RegNames::R2, RegNames::R0, RegNames::R1).unwrap();
 
                 assert_eq!(res_lo, cpu.get_register_intern(RegNames::R2));
@@ -1380,91 +1543,90 @@ mod tests {
 
     multiply_tests! {
         function: mul,
-        mul_test_1: 
+        mul_test_1:
             (17, 32, 1, 3, T, 1, 544, [F; 4]),
-        mul_test_2: 
+        mul_test_2:
             (34, -9, -8, 2, T, -8, -306, [T, F, F, F]),
-        mul_test_3: 
+        mul_test_3:
             (0, 85, 3, -5, T, 3, 0, [F, T, F, F]),
-        mul_test_4: 
+        mul_test_4:
             (32768, 131072, 0, 8, T, 0, 0, [F, T, F, F]),
-        mul_test_5: 
+        mul_test_5:
             (-38, 987, -1, 0, F, -1, -37506, [F; 4])
     }
 
     multiply_tests! {
         function: mla,
-        mla_test_1: 
+        mla_test_1:
             (12, 17, 6, 3, T, 6, 210, [F; 4]),
-        mla_test_2: 
+        mla_test_2:
             (8, -26, 50, 2, T, 50, -158, [T, F, F, F]),
-        mla_test_3: 
+        mla_test_3:
             (2, 45, -90, -5, T, -90, 0, [F, T, F, F]),
-        mla_test_4: 
+        mla_test_4:
             (32768, 131072, 15, 8, T, 15, 15, [F; 4]),
-        mla_test_5: 
+        mla_test_5:
             (-38, 187, -14, 0, F, -14, -7120, [F; 4])
     }
 
     multiply_tests! {
         function: smull,
-        smull_test_1: 
+        smull_test_1:
             (11, 89, 1, 3, T, 979, 0, [F; 4]),
-        smull_test_2: 
+        smull_test_2:
             (17, -28, -8, 2, T, -476, -1, [T, F, F, F]),
-        smull_test_3: 
+        smull_test_3:
             (0, 85, 3, -5, T, 0, 0, [F, T, F, F]),
-        smull_test_4: 
+        smull_test_4:
             (334375, 230893, 0, 8, T, -104564453, 17, [F; 4]),
-        smull_test_5: 
+        smull_test_5:
             (17, -28, -8, 0, F, -476, -1, [F; 4])
     }
 
     multiply_tests! {
         function: umull,
-        umull_test_1: 
+        umull_test_1:
             (26, 92, 1, 3, T, 2392, 0, [F; 4]),
-        umull_test_2: 
+        umull_test_2:
             (-1, -1, -8, 2, T, 1, -2, [T, F, F, F]),
-        umull_test_3: 
+        umull_test_3:
             (0, 129, 3, -5, T, 0, 0, [F, T, F, F]),
-        umull_test_4: 
+        umull_test_4:
             (838299, 756273, 0, 8, T, -1672260181, 147, [F; 4]),
-        umull_test_5: 
+        umull_test_5:
             (-1, -1, -1, 0, F, 1, -2, [F; 4])
     }
-    
+
     multiply_tests! {
         function: smlal,
-        smlal_test_1: 
+        smlal_test_1:
             (83, 32, 102, 0, T, 2758, 0, [F; 4]),
-        smlal_test_2: 
+        smlal_test_2:
             (729276, -937263, 76, 120, T, -623611448, -40, [T, F, F, F]),
-        smlal_test_3: 
+        smlal_test_3:
             (2, -85, 170, 0, T, 0, 0, [F, T, F, F]),
-        smlal_test_4: 
+        smlal_test_4:
             (-042003, 300160, 8838, -3729, T, 277290246, -3732, [T, F, F, F]),
-        smlal_test_5: 
+        smlal_test_5:
             (729276, -937263, 76, 120, F, -623611448, -40, [F; 4])
     }
-    
+
     multiply_tests! {
         function: umlal,
-        umlal_test_1: 
+        umlal_test_1:
             (15, 64, 111, 0, T, 1071, 0, [F; 4]),
-        umlal_test_2: 
+        umlal_test_2:
             (-1, -1, 10, -92, T, 11, -94, [T, F, F, F]),
-        umlal_test_3: 
+        umlal_test_3:
             (3, 43, -129, 0, T, 0, 0, [F, T, F, F]),
-        umlal_test_4: 
+        umlal_test_4:
             (57356, -97526, 736, -847, T, -1298733224, 56507, [F; 4]),
-        umlal_test_5: 
+        umlal_test_5:
             (-1, -1, 10, -92, F, 11, -94, [F; 4])
     }
 
-
     macro_rules! miscellaneous_arithmetic_tests {
-        (function: $function:ident, $($test_name:ident: $test_values:expr),*) 
+        (function: $function:ident, $($test_name:ident: $test_values:expr),*)
         => {$(
             #[test]
             fn $test_name() {
@@ -1489,12 +1651,10 @@ mod tests {
         clz_test_5: (15, 28)
     }
 
-
     //todo branch instructions but first implement unconditional instructions (bx)
 
-
     macro_rules! load_tests {
-        (function: $function:ident, $($test_name:ident: $test_values:expr),*) 
+        (function: $function:ident, $($test_name:ident: $test_values:expr),*)
         => {$(
             #[test]
             fn $test_name() {
@@ -1504,94 +1664,94 @@ mod tests {
                 cpu.set_encoding(enc);
                 cpu.set_register(RegNames::R1, addr);
                 let am = AddressingMode {
-                    p: T, u: T, w: F, rn: RegNames::R1, 
+                    p: T, u: T, w: F, rn: RegNames::R1,
                     offset_type: OffsetType::Immediate{ offset }
                 };
 
                 let address = (addr + (offset as i32)) as u32 as usize;
                 cpu.memory.splice(address..address+4, bytes);
-                
+
                 let register = if pc { RegNames::PC } else { RegNames::R1 };
 
                 cpu.$function(register, am).unwrap();
-                assert_eq!(result, cpu.get_register(register));            
+                assert_eq!(result, cpu.get_register(register));
             }
         )*}
     }
 
     load_tests! {
         function: ldr,
-        ldr_test_1: 
+        ldr_test_1:
             ([58, 222, 104, 177], 0x2124, 0x0, Endian::Big, F, 987654321),
-        ldr_test_2: 
+        ldr_test_2:
             ([173, 183, 78, 31], 0x0, 0x0, Endian::Little, T, 525252524),
-        ldr_test_3: 
+        ldr_test_3:
             ([0, 92, 166, 215], 0x2124, 0x64, Endian::Big, F, 6072023),
-        ldr_test_4: 
+        ldr_test_4:
             ([0, 92, 166, 215], 0x2126, 0x0, Endian::Big, F, 6029312),
-        ldr_test_5: 
+        ldr_test_5:
             ([3, 92, 166, 215], 0x2124, 0x1, Endian::Little, T, 10902530)
     }
 
     load_tests! {
         function: ldrb,
-        ldrb_test_1: 
+        ldrb_test_1:
             ([58, 222, 104, 177], 0x2127, 0, Endian::Big, F, 58),
-        ldrb_test_2: 
+        ldrb_test_2:
             ([173, 183, 78, 31], 0, 0, Endian::Little, T, 173),
-        ldrb_test_3: 
+        ldrb_test_3:
             ([0, 92, 166, 215], 0x2124, 0x64, Endian::Big, F, 0)
     }
 
     load_tests! {
         function: ldrbt,
-        ldrbt_test_1: 
+        ldrbt_test_1:
             ([58, 222, 104, 177], 0x2127, 0, Endian::Big, F, 58),
-        ldrbt_test_2: 
+        ldrbt_test_2:
             ([173, 183, 78, 31], 0, 0, Endian::Little, T, 173),
-        ldrbt_test_3: 
+        ldrbt_test_3:
             ([0, 92, 166, 215], 0x2124, 0x64, Endian::Big, F, 0)
     }
 
     load_tests! {
         function: ldrh,
-        ldrh_test_1: 
+        ldrh_test_1:
             ([58, 222, 104, 177], 0x2126, 0, Endian::Big, F, 15070),
-        ldrh_test_2: 
+        ldrh_test_2:
             ([173, 183, 78, 31], 0, 0, Endian::Little, F, 47021),
-        ldrh_test_3: 
+        ldrh_test_3:
             ([0, 92, 166, 215], 0x2124, 0x64, Endian::Big, T, 92)
     }
 
     // found fault: ldrsb did not extend the sign (fixed)
     load_tests! {
         function: ldrsb,
-        ldrsb_test_1: 
+        ldrsb_test_1:
             ([58, 222, 104, 177], 0x2127, 0, Endian::Big, T, 58),
-        ldrsb_test_2: 
+        ldrsb_test_2:
             ([173, 183, 78, 31], 0, 0, Endian::Little, F, -83),
-        ldrsb_test_3: 
+        ldrsb_test_3:
             ([255, 92, 166, 215], 0x2124, 0x64, Endian::Big, F, -1)
     }
 
     // found fault: ldrsh did not extend the sign (fixed)
     load_tests! {
         function: ldrsh,
-        ldrsh_test_1: 
+        ldrsh_test_1:
             ([58, 222, 104, 177], 0x2126, 0, Endian::Big, F, 15070),
-        ldrsh_test_2: 
+        ldrsh_test_2:
             ([173, 183, 78, 31], 0, 0, Endian::Little, T, -18515),
-        ldrsh_test_3: 
+        ldrsh_test_3:
             ([255, 255, 166, 215], 0x2124, 0x64, Endian::Big, F, -1)
     }
 
     load_tests! {
         function: ldrt,
-        ldrt_test_1: 
+        ldrt_test_1:
             ([58, 222, 104, 177], 0x2124, 0, Endian::Big, F, 987654321),
-        ldrt_test_2: 
+        ldrt_test_2:
             ([173, 183, 78, 31], 0, 0, Endian::Little, F, 525252525),
-        ldrt_test_3: 
+        ldrt_test_3:
             ([0, 92, 166, 215], 0x2124, 0x64, Endian::Big, T, 6072022)
     }
 
@@ -1607,7 +1767,7 @@ mod tests {
                 cpu.set_register(RegNames::R0, value);
                 cpu.set_register(RegNames::R1, address);
                 let am = AddressingMode {
-                    p: T, u: T, w: F, rn: RegNames::R1, 
+                    p: T, u: T, w: F, rn: RegNames::R1,
                     offset_type: OffsetType::Immediate{ offset }
                 };
 
@@ -1615,67 +1775,67 @@ mod tests {
 
                 let address = (address + (offset as i32)) as u32 as usize;
                 let bytes = &cpu.memory[address..address+4];
-                assert_eq!(result, bytes);            
+                assert_eq!(result, bytes);
             }
         )*}
     }
 
     store_tests! {
         function: str,
-        str_test_1: 
+        str_test_1:
             (987654321, 0x2124, 0, Endian::Big, [58, 222, 104, 177]),
-        str_test_2: 
+        str_test_2:
             (525252525, 0, 0, Endian::Little, [173, 183, 78, 31]),
-        str_test_3: 
+        str_test_3:
             (6072023, 0x2124, 0x64, Endian::Big, [0, 92, 166, 215]),
-        str_test_4: 
+        str_test_4:
             (6072023, 0x2125, 0x64, Endian::Little, [166, 92, 0, 0]),
-        str_test_5: 
+        str_test_5:
             (6072023, 0x2124, 0x66, Endian::Big, [166, 215, 0, 0])
     }
 
     store_tests! {
         function: strb,
-        strb_test_1: 
+        strb_test_1:
             (987654321, 0x2127, 0, Endian::Big, [177, 0, 0, 0]),
-        strb_test_2: 
+        strb_test_2:
             (525252525, 0, 0, Endian::Little, [173, 0, 0, 0]),
-        strb_test_3: 
+        strb_test_3:
             (6072023, 0x2124, 0x64, Endian::Big, [215, 0, 0, 0])
     }
 
     store_tests! {
         function: strbt,
-        strbt_test_1: 
+        strbt_test_1:
             (987654321, 0x2127, 0, Endian::Big, [177, 0, 0, 0]),
-        strbt_test_2: 
+        strbt_test_2:
             (525252525, 0, 0, Endian::Little, [173, 0, 0, 0]),
-        strbt_test_3: 
+        strbt_test_3:
             (6072023, 0x2124, 0x64, Endian::Big, [215, 0, 0, 0])
     }
 
     store_tests! {
         function: strh,
-        strh_test_1: 
+        strh_test_1:
             (987654321, 0x2126, 0, Endian::Big, [104, 177, 0, 0]),
-        strh_test_2: 
+        strh_test_2:
             (525252525, 0, 0, Endian::Little, [173, 183, 0, 0]),
-        strh_test_3: 
+        strh_test_3:
             (6072023, 0x2124, 0x64, Endian::Big, [166, 215, 0, 0])
     }
 
     store_tests! {
         function: strt,
-        strt_test_1: 
+        strt_test_1:
             (987654321, 0x2124, 0, Endian::Big, [58, 222, 104, 177]),
-        strt_test_2: 
+        strt_test_2:
             (525252525, 0, 0, Endian::Little, [173, 183, 78, 31]),
-        strt_test_3: 
+        strt_test_3:
             (6072023, 0x2124, 0x64, Endian::Big, [0, 92, 166, 215])
     }
 
     macro_rules! load_multiple_tests {
-        ($($test_name:ident: $test_values:expr),*) 
+        ($($test_name:ident: $test_values:expr),*)
         => {$(
             #[test]
             fn $test_name() {
@@ -1692,21 +1852,21 @@ mod tests {
                 cpu.memory.splice(address..address+8, bytes);
 
                 cpu.ldm(amm).unwrap();
-                
+
                 assert_eq!(result, [
-                        cpu.get_register(RegNames::R3), 
+                        cpu.get_register(RegNames::R3),
                         cpu.get_register(RegNames::PC)
-                    ]); 
+                    ]);
             }
         )*}
     }
 
     load_multiple_tests! {
-        ldm_test_1: 
+        ldm_test_1:
             ([1,2,3,4,5,6,7,8], 0x3928, Endian::Big, [16909060, 84281096]),
         ldm_test_2:
             ([1,2,3,4,4,6,7,8], 0x3928, Endian::Little, [67305985, 134678020]),
-        ldm_test_3: 
+        ldm_test_3:
             ([255,255,255,255,0,0,0,0], 0x27, Endian::Big, [255, -256]),
         ldm_test_4:
             ([0,0,0,7,0,0,0,7], 0x24, Endian::Big, [7, 6])
@@ -1733,22 +1893,22 @@ mod tests {
 
                 let address = address as u32 as usize;
                 let bytes = &cpu.memory[address..address+8];
-                assert_eq!(result, bytes);            
+                assert_eq!(result, bytes);
             }
         )*}
     }
-    
+
     store_multiple_tests! {
-        stm_test_1: 
+        stm_test_1:
             ([16909060, 84281096], 0x3928, Endian::Big, [1,2,3,4,5,6,7,16]),
-        stm_test_2: 
+        stm_test_2:
             ([67305985, 134678021], 0x3928, Endian::Little, [1,2,3,4,13,6,7,8]),
-        stm_test_3: 
+        stm_test_3:
             ([255, -256], 0x27, Endian::Big, [255,255,255,255,8,0,0,0])
     }
 
     macro_rules! swap_tests {
-        (function: $function:ident, $($test_name:ident: $test_values:expr),*) 
+        (function: $function:ident, $($test_name:ident: $test_values:expr),*)
         => {$(
             #[test]
             fn $test_name() {
@@ -1768,7 +1928,7 @@ mod tests {
 
                 assert_eq!(rreg, cpu.get_register_intern(RegNames::R1));
                 let bytes = &cpu.memory[address..address+4];
-                assert_eq!(rmem, bytes);  
+                assert_eq!(rmem, bytes);
             }
         )*}
     }
@@ -1776,21 +1936,21 @@ mod tests {
     // found fault: swp did rotate value 8 * bits[0:1] (fixed)
     swap_tests! {
         function: swp,
-        swp_test_1: 
+        swp_test_1:
             (7342274, [1,7,6,2], 0x38, Endian::Big, F, 17237506, [0,112,8,194]),
-        swp_test_2: 
+        swp_test_2:
             (98125, [15,23,5,0], 0x4C, Endian::Little, T, 333583, [77,127,1,0]),
-        swp_test_3: 
+        swp_test_3:
             (175325, [3,5,1,3], 0xA2, Endian::Big, T, 16974597, [0,2,172,221])
     }
 
     swap_tests! {
         function: swpb,
-        swpb_test_1: 
+        swpb_test_1:
             (7342274, [182,7,6,2], 0x38, Endian::Big, F, 182, [194,7,6,2]),
-        swpb_test_2: 
+        swpb_test_2:
             (98125, [15,23,5,0], 0x4C, Endian::Little, T, 15, [77,23,5,0]),
-        swpb_test_3: 
+        swpb_test_3:
             (175325, [3,5,1,3], 0xA2, Endian::Big, T, 1, [3,5,221,3])
     }
 }

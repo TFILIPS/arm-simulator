@@ -1,11 +1,12 @@
-use crate::utils::{BitAccess, T, F};
 use super::{
-    SimulatedCPU, ARMv5CPU, names::RegNames, instructions::*,
+    instructions::*,
+    names::RegNames,
     operands::{
-        ShifterOperand, AddressingMode, OffsetType,
-        AddressingModeMultiple, BranchOperator
-    }
+        AddressingMode, AddressingModeMultiple, BranchOperator, OffsetType, ShifterOperand,
+    },
+    ARMv5CPU, SimulatedCPU,
 };
+use crate::utils::{BitAccess, F, T};
 
 pub trait InstructionDecoder<I: Instruction<C, S>, C: SimulatedCPU<S>, S> {
     fn decode(instruction_bits: u32) -> I;
@@ -18,84 +19,81 @@ impl InstructionDecoder<ARMv5Instruction, ARMv5CPU, i32> for ARMv5Decoder {
     fn decode(instruction_bits: u32) -> ARMv5Instruction {
         let category = if instruction_bits.cut_bits(28..=31) != 0b1111 {
             match instruction_bits.cut_bits(26..=27) {
-                0b00 => ARMv5Decoder::data_and_miscellaneos,
+                0b00 => ARMv5Decoder::data_and_miscellaneous,
                 0b01 => ARMv5Decoder::load_store,
                 0b10 => ARMv5Decoder::branch_and_block_transfer,
                 0b11 => ARMv5Decoder::coprocessor_and_swi,
-                _ => panic!("Unreachable code!") // ALEX: panicking is fine, but "unreachable code" seems like the wrong error message
+                _ => panic!("Unreachable code!"), // ALEX: panicking is fine, but "unreachable code" seems like the wrong error message
             }
-        }
-        else { ARMv5Decoder::unconditional }; // ALEX: this nested if is a bit hard to parse when reading the first time. Can you refactor?
+        } else {
+            ARMv5Decoder::unconditional
+        }; // ALEX: this nested if is a bit hard to parse when reading the first time. Can you refactor?
 
         category(instruction_bits) // ALEX: nice design :) Maybe we can improve the readability of this function together
     }
 }
 impl ARMv5Decoder {
-    const UNDEFINED_INSTRUCTION: ARMv5Instruction = ARMv5Instruction{
+    const UNDEFINED_INSTRUCTION: ARMv5Instruction = ARMv5Instruction {
         condition: Condition::AL,
-        instruction_type: ARMv5InstructionType::Undefined
+        instruction_type: ARMv5InstructionType::Undefined,
     };
 
-    fn data_and_miscellaneos(inst_bits: u32) -> ARMv5Instruction {
+    fn data_and_miscellaneous(inst_bits: u32) -> ARMv5Instruction {
         let op: bool = inst_bits.get_bit(25);
         let op1: u32 = inst_bits.cut_bits(20..=24);
         let op2: u32 = inst_bits.cut_bits(4..=7);
 
-        if !op {
+        if !op { // ALEX: this function is very large, please try to split
             if !bm(op1, 0b11001, 0b10000) {
                 if bm(op2, 0b0001, 0b0000) {
-                    let so: ShifterOperand = ShifterOperand::ImmediateShift { 
-                        shift_amount: inst_bits.cut_bits(7..=11)
-                            .try_into().unwrap(), 
-                        shift: inst_bits.cut_bits(5..=6).into(), 
-                        rm: inst_bits.cut_bits(0..=3).into()
+                    let so: ShifterOperand = ShifterOperand::ImmediateShift {
+                        shift_amount: inst_bits
+                            .cut_bits(7..=11) // ALEX: maybe the BitAccess trait could have a cut_bits_copy? I might be overengineering, I just hate unwrap
+                            .try_into()
+                            .unwrap(),
+                        shift: inst_bits.cut_bits(5..=6).into(),
+                        rm: inst_bits.cut_bits(0..=3).into(),
+                    };
+                    return ARMv5Decoder::data(inst_bits, so);
+                } else if bm(op2, 0b1001, 0b0001) {
+                    let so: ShifterOperand = ShifterOperand::RegisterShift {
+                        rs: inst_bits.cut_bits(8..=11).into(),
+                        shift: inst_bits.cut_bits(5..=6).into(),
+                        rm: inst_bits.cut_bits(0..=3).into(),
                     };
                     return ARMv5Decoder::data(inst_bits, so);
                 }
-                else if bm(op2, 0b1001, 0b0001) {
-                    let so: ShifterOperand = ShifterOperand::RegisterShift { 
-                        rs: inst_bits.cut_bits(8..=11).into(), 
-                        shift: inst_bits.cut_bits(5..=6).into(), 
-                        rm: inst_bits.cut_bits(0..=3).into()
-                    };
-                    return ARMv5Decoder::data(inst_bits, so);
-                }
-            }
-            else if bm(op2, 0b1000, 0b0000) {
-                return ARMv5Decoder::miscellaneos(inst_bits);
+            } else if bm(op2, 0b1000, 0b0000) {
+                return ARMv5Decoder::miscellaneous(inst_bits);
             }
 
             if bm(op2, 0b1111, 0b1001) {
                 if bm(op1, 0b10000, 0b00000) {
                     return ARMv5Decoder::multiply(inst_bits);
-                }
-                else if bm(op1, 0b10000, 0b10000) {
+                } else if bm(op1, 0b10000, 0b10000) {
                     return ARMv5Decoder::synchronization(inst_bits);
                 }
-            }
-            else if bm(op2, 0b1111, 0b1011) || bm(op2, 0b1101, 0b1101) {
+            } else if bm(op2, 0b1111, 0b1011) || bm(op2, 0b1101, 0b1101) {
                 if !bm(op1, 0b10010, 0b00010) {
                     return ARMv5Decoder::extra_load_store(inst_bits);
                 }
             }
-        }
-        else {
+        } else {
             if !bm(op1, 0b11001, 0b10000) {
-                let so: ShifterOperand = ShifterOperand::Immediate { 
-                    rotate: inst_bits.cut_bits(8..=11).try_into().unwrap(), 
-                    immediate: inst_bits.cut_bits(0..=7).try_into().unwrap() 
+                let so: ShifterOperand = ShifterOperand::Immediate {
+                    rotate: inst_bits.cut_bits(8..=11).try_into().unwrap(),
+                    immediate: inst_bits.cut_bits(0..=7).try_into().unwrap(),
                 };
                 return ARMv5Decoder::data(inst_bits, so);
-            }
-            else if bm(op1, 0b11011, 0b10010) {
+            } else if bm(op1, 0b11011, 0b10010) {
                 return ARMv5Instruction {
                     condition: Condition::from_instruction(inst_bits),
-                    instruction_type: ARMv5InstructionType::Generic { 
-                        op: ARMv5GenericOperation::MSR
-                    }
+                    instruction_type: ARMv5InstructionType::Generic {
+                        op: ARMv5GenericOperation::MSR,
+                    },
                 };
             }
-        }
+        } // ALEX: I get that this easy to write in a messy form, and my first attempt would probably be similar, but I think we can do better together :)
         ARMv5Decoder::UNDEFINED_INSTRUCTION
     }
 
@@ -105,47 +103,57 @@ impl ARMv5Decoder {
         let rd: RegNames = inst_bits.cut_bits(12..=15).into();
         let s: bool = inst_bits.get_bit(20);
 
-        ARMv5Instruction { 
+        ARMv5Instruction {
             condition: Condition::from_instruction(inst_bits),
-            instruction_type: ARMv5InstructionType::DataProcessing { 
-                op: ARMv5DataProcessingOperation::from_bits(opcode), 
-                s, rn, rd, so 
-            }
+            instruction_type: ARMv5InstructionType::DataProcessing {
+                op: ARMv5DataProcessingOperation::from_bits(opcode),
+                s,
+                rn,
+                rd,
+                so,
+            },
         }
     }
 
-    fn miscellaneos(inst_bits: u32) -> ARMv5Instruction {
+    fn miscellaneous(inst_bits: u32) -> ARMv5Instruction {
         let op: u32 = inst_bits.cut_bits(21..=22);
         let op2: u32 = inst_bits.cut_bits(4..=6);
-        
+
         let rm: RegNames = inst_bits.cut_bits(0..=3).into();
         let rd: RegNames = inst_bits.cut_bits(12..=15).into();
-        
+
         let instruction_type: ARMv5InstructionType = match (op2, op) {
-            (0b000, 0b00 | 0b10) => ARMv5InstructionType::Generic { 
-                op: ARMv5GenericOperation::MRS
+            (0b000, 0b00 | 0b10) => ARMv5InstructionType::Generic {
+                op: ARMv5GenericOperation::MRS,
             },
-            (0b000, 0b01 | 0b11) => ARMv5InstructionType::Generic { 
-                op: ARMv5GenericOperation::MSR
+            (0b000, 0b01 | 0b11) => ARMv5InstructionType::Generic {
+                op: ARMv5GenericOperation::MSR,
             },
             (0b001, 0b01) => ARMv5InstructionType::Branch {
-                op: ARMv5BranchOperation::BX, bo: BranchOperator::Register(rm)
+                op: ARMv5BranchOperation::BX,
+                bo: BranchOperator::Register(rm),
             },
-            (0b001, 0b11) => ARMv5InstructionType::Miscellaneous { 
-                op: ARMv5MiscellaneousOperation::CLZ, rd, rm 
+            (0b001, 0b11) => ARMv5InstructionType::Miscellaneous {
+                op: ARMv5MiscellaneousOperation::CLZ,
+                rd,
+                rm,
             },
             (0b011, 0b01) => ARMv5InstructionType::Branch {
-                op: ARMv5BranchOperation::BLX, bo: BranchOperator::Register(rm)
+                op: ARMv5BranchOperation::BLX,
+                bo: BranchOperator::Register(rm),
             },
             (0b111, 0b01) => ARMv5InstructionType::Generic {
-                op: ARMv5GenericOperation::BKPT
-            },        
-            _ => return ARMv5Decoder::UNDEFINED_INSTRUCTION
+                op: ARMv5GenericOperation::BKPT,
+            },
+            _ => return ARMv5Decoder::UNDEFINED_INSTRUCTION,
         };
 
         let condition: Condition = Condition::from_instruction(inst_bits);
 
-        ARMv5Instruction { condition,  instruction_type }
+        ARMv5Instruction {
+            condition,
+            instruction_type,
+        }
     }
 
     fn multiply(inst_bits: u32) -> ARMv5Instruction {
@@ -156,7 +164,7 @@ impl ARMv5Decoder {
             0b101 => ARMv5MultiplyOperation::UMLAL,
             0b110 => ARMv5MultiplyOperation::SMULL,
             0b111 => ARMv5MultiplyOperation::SMLAL,
-            _ => return ARMv5Decoder::UNDEFINED_INSTRUCTION
+            _ => return ARMv5Decoder::UNDEFINED_INSTRUCTION,
         };
 
         let condition: Condition = Condition::from_instruction(inst_bits);
@@ -167,10 +175,16 @@ impl ARMv5Decoder {
         let rs: RegNames = inst_bits.cut_bits(8..=11).into();
         let rm: RegNames = inst_bits.cut_bits(0..=3).into();
 
-        ARMv5Instruction { 
-            condition, instruction_type: ARMv5InstructionType::Multiply { 
-                op, s, rn_lo, rd_hi, rs, rm
-            } 
+        ARMv5Instruction {
+            condition,
+            instruction_type: ARMv5InstructionType::Multiply {
+                op,
+                s,
+                rn_lo,
+                rd_hi,
+                rs,
+                rm,
+            },
         }
     }
 
@@ -178,11 +192,10 @@ impl ARMv5Decoder {
         if inst_bits.get_bit(23) || inst_bits.cut_bits(20..=21) != 0 {
             return ARMv5Decoder::UNDEFINED_INSTRUCTION;
         }
-    
+
         let op: ARMv5SynchronizationOperation = if inst_bits.get_bit(22) {
             ARMv5SynchronizationOperation::SWPB
-        }
-        else {
+        } else {
             ARMv5SynchronizationOperation::SWP
         };
 
@@ -191,10 +204,9 @@ impl ARMv5Decoder {
         let rd: RegNames = inst_bits.cut_bits(12..=15).into();
         let rm: RegNames = inst_bits.cut_bits(0..=3).into();
 
-        ARMv5Instruction { 
-            condition, instruction_type: ARMv5InstructionType::Synchronization {
-                 op, rn, rd, rm 
-            }
+        ARMv5Instruction {
+            condition,
+            instruction_type: ARMv5InstructionType::Synchronization { op, rn, rd, rm },
         }
     }
 
@@ -207,21 +219,21 @@ impl ARMv5Decoder {
                 0b01 => ARMv5LoadStoreOperation::LDRH,
                 0b10 => ARMv5LoadStoreOperation::LDRSB,
                 0b11 => ARMv5LoadStoreOperation::LDRSH,
-                _ => return ARMv5Decoder::UNDEFINED_INSTRUCTION
+                _ => return ARMv5Decoder::UNDEFINED_INSTRUCTION,
             }
-        }
-        else if op2 == 0b01 { ARMv5LoadStoreOperation::STRH }
-        else { return ARMv5Decoder::UNDEFINED_INSTRUCTION };
+        } else if op2 == 0b01 {
+            ARMv5LoadStoreOperation::STRH
+        } else {
+            return ARMv5Decoder::UNDEFINED_INSTRUCTION;
+        };
 
         let offset_type: OffsetType = if inst_bits.get_bit(22) {
-            OffsetType::Immediate { 
-                offset: ((inst_bits.cut_bits(8..=11) << 4) |
-                    inst_bits.cut_bits(0..=3)) as u16
+            OffsetType::Immediate {
+                offset: ((inst_bits.cut_bits(8..=11) << 4) | inst_bits.cut_bits(0..=3)) as u16,
             }
-        }
-        else {
-            OffsetType::Register { 
-                rm: inst_bits.cut_bits(0..=3).into()
+        } else {
+            OffsetType::Register {
+                rm: inst_bits.cut_bits(0..=3).into(),
             }
         };
 
@@ -235,9 +247,18 @@ impl ARMv5Decoder {
         let rd: RegNames = inst_bits.cut_bits(12..=15).into();
 
         ARMv5Instruction {
-            condition, instruction_type: ARMv5InstructionType::LoadStore { 
-                op, rd, am: AddressingMode { p, u, w, rn, offset_type }
-            }
+            condition,
+            instruction_type: ARMv5InstructionType::LoadStore {
+                op,
+                rd,
+                am: AddressingMode {
+                    p,
+                    u,
+                    w,
+                    rn,
+                    offset_type,
+                },
+            },
         }
     }
 
@@ -246,15 +267,14 @@ impl ARMv5Decoder {
             if inst_bits.get_bit(4) {
                 return ARMv5Decoder::UNDEFINED_INSTRUCTION;
             }
-            OffsetType::ScaledRegister { 
-                shift_imm: inst_bits.cut_bits(7..=11) as u8, 
-                shift: inst_bits.cut_bits(5..=6).into(), 
-                rm: inst_bits.cut_bits(0..=3).into() 
+            OffsetType::ScaledRegister {
+                shift_imm: inst_bits.cut_bits(7..=11) as u8,
+                shift: inst_bits.cut_bits(5..=6).into(),
+                rm: inst_bits.cut_bits(0..=3).into(),
             }
-        }
-        else {
-            OffsetType::Immediate { 
-                offset: inst_bits.cut_bits(0..=11) as u16
+        } else {
+            OffsetType::Immediate {
+                offset: inst_bits.cut_bits(0..=11) as u16,
             }
         };
 
@@ -272,7 +292,7 @@ impl ARMv5Decoder {
             (F, T, T, F) => ARMv5LoadStoreOperation::STRBT,
             (_, T, _, F) => ARMv5LoadStoreOperation::STRB,
             (F, T, T, T) => ARMv5LoadStoreOperation::LDRBT,
-            (_, T, _, T) => ARMv5LoadStoreOperation::LDRB
+            (_, T, _, T) => ARMv5LoadStoreOperation::LDRB,
         };
 
         let condition: Condition = Condition::from_instruction(inst_bits);
@@ -280,9 +300,18 @@ impl ARMv5Decoder {
         let rd: RegNames = inst_bits.cut_bits(12..=15).into();
 
         ARMv5Instruction {
-            condition, instruction_type: ARMv5InstructionType::LoadStore { 
-                op, rd, am: AddressingMode { p, u, w, rn, offset_type }
-            }
+            condition,
+            instruction_type: ARMv5InstructionType::LoadStore {
+                op,
+                rd,
+                am: AddressingMode {
+                    p,
+                    u,
+                    w,
+                    rn,
+                    offset_type,
+                },
+            },
         }
     }
 
@@ -293,59 +322,64 @@ impl ARMv5Decoder {
             imm = (imm << 8) >> 8; //sign extend
             let op: ARMv5BranchOperation = match inst_bits.get_bit(24) {
                 true => ARMv5BranchOperation::BL,
-                false => ARMv5BranchOperation::B
+                false => ARMv5BranchOperation::B,
             };
-            ARMv5InstructionType::Branch { op, 
-                bo: BranchOperator::Offset(imm, false)
+            ARMv5InstructionType::Branch {
+                op,
+                bo: BranchOperator::Offset(imm, false),
             }
-        }
-        else{
-            let amm: AddressingModeMultiple = AddressingModeMultiple { 
+        } else {
+            let amm: AddressingModeMultiple = AddressingModeMultiple {
                 p: inst_bits.get_bit(24),
                 u: inst_bits.get_bit(23),
-                w: inst_bits.get_bit(21), 
-                rn: inst_bits.cut_bits(16..=19).into(), 
-                register_list: inst_bits.cut_bits(0..=15) as u16
+                w: inst_bits.get_bit(21),
+                rn: inst_bits.cut_bits(16..=19).into(),
+                register_list: inst_bits.cut_bits(0..=15) as u16,
             };
             let op: ARMv5LoadStoreMultipleOperation = if inst_bits.get_bit(20) {
                 ARMv5LoadStoreMultipleOperation::LDM
-            }
-            else {
+            } else {
                 ARMv5LoadStoreMultipleOperation::STM
             };
             ARMv5InstructionType::LoadStoreMultiple { op, amm }
         };
 
-        ARMv5Instruction { condition, instruction_type }
+        ARMv5Instruction {
+            condition,
+            instruction_type,
+        }
     }
 
     fn coprocessor_and_swi(inst_bits: u32) -> ARMv5Instruction {
         let op1: u32 = inst_bits.cut_bits(20..=25);
 
         let op: ARMv5GenericOperation = if bm(op1, 0b110000, 0b110000) {
-            ARMv5GenericOperation::SWI 
-        }
-        else if !bm(inst_bits.cut_bits(8..=11), 0b1110, 0x1010) {
+            ARMv5GenericOperation::SWI
+        } else if !bm(inst_bits.cut_bits(8..=11), 0b1110, 0x1010) {
             if bm(op1, 0b100001, 0b0) && !bm(op1, 0b111011, 0b0) {
                 ARMv5GenericOperation::STC
-            }
-            else if bm(op1, 0b100001, 0b1) && !bm(op1, 0b111011, 0b1) {
+            } else if bm(op1, 0b100001, 0b1) && !bm(op1, 0b111011, 0b1) {
                 ARMv5GenericOperation::LDC
-            }
-            else if bm(op1, 0b110000, 0b100000) {
+            } else if bm(op1, 0b110000, 0b100000) {
                 if inst_bits.get_bit(4) {
-                    if inst_bits.get_bit(20) { ARMv5GenericOperation::MRC }
-                    else { ARMv5GenericOperation::MCR }
+                    if inst_bits.get_bit(20) {
+                        ARMv5GenericOperation::MRC
+                    } else {
+                        ARMv5GenericOperation::MCR
+                    }
+                } else {
+                    ARMv5GenericOperation::CDP
                 }
-                else { ARMv5GenericOperation::CDP }
+            } else {
+                return ARMv5Decoder::UNDEFINED_INSTRUCTION;
             }
-            else { return ARMv5Decoder::UNDEFINED_INSTRUCTION; }
-        }
-        else { return ARMv5Decoder::UNDEFINED_INSTRUCTION; };
+        } else {
+            return ARMv5Decoder::UNDEFINED_INSTRUCTION;
+        };
 
-        ARMv5Instruction { 
-            condition: Condition::from_instruction(inst_bits), 
-            instruction_type: ARMv5InstructionType::Generic { op }
+        ARMv5Instruction {
+            condition: Condition::from_instruction(inst_bits),
+            instruction_type: ARMv5InstructionType::Generic { op },
         }
     }
 
@@ -357,57 +391,64 @@ impl ARMv5Decoder {
             return ARMv5Instruction {
                 condition: Condition::Unconditional,
                 instruction_type: ARMv5InstructionType::Branch {
-                    op: ARMv5BranchOperation::BLX, 
-                    bo: BranchOperator::Offset(imm, inst_bits.get_bit(24)) 
-                }
+                    op: ARMv5BranchOperation::BLX,
+                    bo: BranchOperator::Offset(imm, inst_bits.get_bit(24)),
+                },
             };
         }
-        let op: ARMv5GenericOperation = 
-            if bm(op1, 0b11100001, 0b11000000) {
-                if !bm(op1, 0b11111011, 0b11000000) {
-                    ARMv5GenericOperation::STC2
-                }
-                else { return ARMv5Decoder::UNDEFINED_INSTRUCTION; }
+        let op: ARMv5GenericOperation = if bm(op1, 0b11100001, 0b11000000) {
+            if !bm(op1, 0b11111011, 0b11000000) {
+                ARMv5GenericOperation::STC2
+            } else {
+                return ARMv5Decoder::UNDEFINED_INSTRUCTION;
             }
-            else if bm(op1, 0b11100001, 0b11000001) {
-                if !bm(op1, 0b11111011, 0b11000001) {
-                    ARMv5GenericOperation::LDC2
-                }
-                else { return ARMv5Decoder::UNDEFINED_INSTRUCTION; }
+        } else if bm(op1, 0b11100001, 0b11000001) {
+            if !bm(op1, 0b11111011, 0b11000001) {
+                ARMv5GenericOperation::LDC2
+            } else {
+                return ARMv5Decoder::UNDEFINED_INSTRUCTION;
             }
-            else if bm(op1, 0b11110000, 0b11100000) {
-                if inst_bits.get_bit(4) {
-                    if inst_bits.get_bit(20) { ARMv5GenericOperation::MRC2 }
-                    else { ARMv5GenericOperation::MCR2 }
+        } else if bm(op1, 0b11110000, 0b11100000) {
+            if inst_bits.get_bit(4) {
+                if inst_bits.get_bit(20) {
+                    ARMv5GenericOperation::MRC2
+                } else {
+                    ARMv5GenericOperation::MCR2
                 }
-                else { ARMv5GenericOperation::CDP2 }
+            } else {
+                ARMv5GenericOperation::CDP2
             }
-            else { return ARMv5Decoder::UNDEFINED_INSTRUCTION; };
+        } else {
+            return ARMv5Decoder::UNDEFINED_INSTRUCTION;
+        };
 
-            ARMv5Instruction { 
-                condition: Condition::Unconditional, 
-                instruction_type: ARMv5InstructionType::Generic { op } 
-            }
+        ARMv5Instruction {
+            condition: Condition::Unconditional,
+            instruction_type: ARMv5InstructionType::Generic { op },
+        }
     }
 }
 
 fn bm(value: u32, mask: u32, expectation: u32) -> bool {
+    // ALEX: please rename to something more descriptive, maybe we can also improve the signature to simplify calls
     (value & mask) ^ expectation == 0
 }
 
-
-#[cfg(test)]
+#[cfg(test)] // ALEX: these tests make up most of the code, please move to own file to reduce clutter
 mod tests {
-    use crate::simulated_cpu::{instructions::*, names::RegNames, operands::{
-            ShifterOperand, barrel_shifter::ShiftType, 
-            AddressingMode, OffsetType, AddressingModeMultiple, BranchOperator
-        }
+    use crate::simulated_cpu::{
+        instructions::*,
+        names::RegNames,
+        operands::{
+            barrel_shifter::ShiftType, AddressingMode, AddressingModeMultiple, BranchOperator,
+            OffsetType, ShifterOperand,
+        },
     };
 
-    use super::{InstructionDecoder, ARMv5Decoder};
+    use super::{ARMv5Decoder, InstructionDecoder};
 
     macro_rules! decoder_tests {
-        ($($test_name:ident: $test_values:expr),*) 
+        ($($test_name:ident: $test_values:expr),*)
         => {$(
             #[test]
             fn $test_name() {
@@ -531,7 +572,7 @@ mod tests {
                     s: true,
                     rd: RegNames::R6,
                     rn: RegNames::R2,
-                    so: ShifterOperand::Immediate { 
+                    so: ShifterOperand::Immediate {
                         immediate: 186, rotate: 0
                     }
                 }
@@ -580,7 +621,7 @@ mod tests {
                     s: true,
                     rd: RegNames::R0,
                     rn: RegNames::R4,
-                    so: ShifterOperand::Immediate { 
+                    so: ShifterOperand::Immediate {
                         immediate: 21, rotate: 4
                     }
                 }
@@ -680,7 +721,7 @@ mod tests {
                     s: false,
                     rd: RegNames::R11,
                     rn: RegNames::R0,
-                    so: ShifterOperand::Immediate { 
+                    so: ShifterOperand::Immediate {
                         immediate: 87, rotate: 14
                     }
                 }
@@ -691,7 +732,7 @@ mod tests {
             0x20000d97,
             ARMv5Instruction {
                 condition: Condition::HS,
-                instruction_type: ARMv5InstructionType::Multiply { 
+                instruction_type: ARMv5InstructionType::Multiply {
                     op: ARMv5MultiplyOperation::MUL,
                     s: false,
                     rn_lo: RegNames::R0,
@@ -705,7 +746,7 @@ mod tests {
             0xe0329691,
             ARMv5Instruction {
                 condition: Condition::AL,
-                instruction_type: ARMv5InstructionType::Multiply { 
+                instruction_type: ARMv5InstructionType::Multiply {
                     op: ARMv5MultiplyOperation::MLA,
                     s: true,
                     rn_lo: RegNames::R9,
@@ -719,7 +760,7 @@ mod tests {
             0x60ccd092,
             ARMv5Instruction {
                 condition: Condition::VS,
-                instruction_type: ARMv5InstructionType::Multiply { 
+                instruction_type: ARMv5InstructionType::Multiply {
                     op: ARMv5MultiplyOperation::SMULL,
                     s: false,
                     rn_lo: RegNames::SP,
@@ -733,7 +774,7 @@ mod tests {
             0x80997a90,
             ARMv5Instruction {
                 condition: Condition::HI,
-                instruction_type: ARMv5InstructionType::Multiply { 
+                instruction_type: ARMv5InstructionType::Multiply {
                     op: ARMv5MultiplyOperation::UMULL,
                     s: true,
                     rn_lo: RegNames::R7,
@@ -747,7 +788,7 @@ mod tests {
             0xe0ea4c91,
             ARMv5Instruction {
                 condition: Condition::AL,
-                instruction_type: ARMv5InstructionType::Multiply { 
+                instruction_type: ARMv5InstructionType::Multiply {
                     op: ARMv5MultiplyOperation::SMLAL,
                     s: false,
                     rn_lo: RegNames::R4,
@@ -761,7 +802,7 @@ mod tests {
             0x40a8e29b,
             ARMv5Instruction {
                 condition: Condition::MI,
-                instruction_type: ARMv5InstructionType::Multiply { 
+                instruction_type: ARMv5InstructionType::Multiply {
                     op: ARMv5MultiplyOperation::UMLAL,
                     s: false,
                     rn_lo: RegNames::LR,
@@ -789,7 +830,7 @@ mod tests {
             0x9a0241c0,
             ARMv5Instruction {
                 condition: Condition::LS,
-                instruction_type: ARMv5InstructionType::Branch { 
+                instruction_type: ARMv5InstructionType::Branch {
                     op: ARMv5BranchOperation::B,
                     bo: BranchOperator::Offset(147904, false)
                 }
@@ -799,7 +840,7 @@ mod tests {
             0xeb2ad361,
             ARMv5Instruction {
                 condition: Condition::AL,
-                instruction_type: ARMv5InstructionType::Branch { 
+                instruction_type: ARMv5InstructionType::Branch {
                     op: ARMv5BranchOperation::BL,
                     bo: BranchOperator::Offset(2806625, false)
                 }
@@ -809,20 +850,20 @@ mod tests {
             0x812fff15,
             ARMv5Instruction {
                 condition: Condition::HI,
-                instruction_type: ARMv5InstructionType::Branch { 
+                instruction_type: ARMv5InstructionType::Branch {
                     op: ARMv5BranchOperation::BX,
                     bo: BranchOperator::Register(RegNames::R5)
                 }
             }
         ),
         //not yet implemented!!!
-        //blx_label: ( 
+        //blx_label: (
         //    0xfa1bc32e,
         //    ARMv5Instruction {
         //        condition: Condition::VS,
-        //        instruction_type: ARMv5InstructionType::Branch { 
+        //        instruction_type: ARMv5InstructionType::Branch {
         //            op: ARMv5BranchOperation::BLX,
-        //            si: 72081330, 
+        //            si: 72081330,
         //            rm: RegNames::R0
         //        }
         //    }
@@ -831,7 +872,7 @@ mod tests {
             0x112fff39,
             ARMv5Instruction {
                 condition: Condition::NE,
-                instruction_type: ARMv5InstructionType::Branch { 
+                instruction_type: ARMv5InstructionType::Branch {
                     op: ARMv5BranchOperation::BLX,
                     bo: BranchOperator::Register(RegNames::R9)
                 }
@@ -842,13 +883,13 @@ mod tests {
             0xa5b3adff,
             ARMv5Instruction {
                 condition: Condition::GE,
-                instruction_type: ARMv5InstructionType::LoadStore { 
-                    op: ARMv5LoadStoreOperation::LDR, 
-                    rd: RegNames::R10, 
-                    am: AddressingMode { 
+                instruction_type: ARMv5InstructionType::LoadStore {
+                    op: ARMv5LoadStoreOperation::LDR,
+                    rd: RegNames::R10,
+                    am: AddressingMode {
                         p: true, u: true, w: true,
-                        rn: RegNames::R3, 
-                        offset_type: OffsetType::Immediate { 
+                        rn: RegNames::R3,
+                        offset_type: OffsetType::Immediate {
                             offset: 03583
                         }
                     }
@@ -859,16 +900,16 @@ mod tests {
             0xe6d75fe1,
             ARMv5Instruction {
                 condition: Condition::AL,
-                instruction_type: ARMv5InstructionType::LoadStore { 
-                    op: ARMv5LoadStoreOperation::LDRB, 
-                    rd: RegNames::R5, 
-                    am: AddressingMode { 
-                        p: false, u: true, w: false, 
-                        rn: RegNames::R7, 
+                instruction_type: ARMv5InstructionType::LoadStore {
+                    op: ARMv5LoadStoreOperation::LDRB,
+                    rd: RegNames::R5,
+                    am: AddressingMode {
+                        p: false, u: true, w: false,
+                        rn: RegNames::R7,
                         offset_type: OffsetType::ScaledRegister {
                             rm: RegNames::R1,
                             shift: ShiftType::ROR,
-                            shift_imm: 31 
+                            shift_imm: 31
                         }
                     }
                 }
@@ -878,12 +919,12 @@ mod tests {
             0xa6f4e00e,
             ARMv5Instruction {
                 condition: Condition::GE,
-                instruction_type: ARMv5InstructionType::LoadStore { 
-                    op: ARMv5LoadStoreOperation::LDRBT, 
-                    rd: RegNames::LR, 
-                    am: AddressingMode { 
-                        p: false, u: true, w: true, 
-                        rn: RegNames::R4, 
+                instruction_type: ARMv5InstructionType::LoadStore {
+                    op: ARMv5LoadStoreOperation::LDRBT,
+                    rd: RegNames::LR,
+                    am: AddressingMode {
+                        p: false, u: true, w: true,
+                        rn: RegNames::R4,
                         offset_type: OffsetType::ScaledRegister {
                             rm: RegNames::LR,
                             shift: ShiftType::LSL,
@@ -898,14 +939,14 @@ mod tests {
             0xe1d5c0b0,
             ARMv5Instruction {
                 condition: Condition::AL,
-                instruction_type: ARMv5InstructionType::LoadStore { 
-                    op: ARMv5LoadStoreOperation::LDRH, 
-                    rd: RegNames::R12, 
-                    am: AddressingMode { 
-                        p: true, u: true, w: false, 
-                        rn: RegNames::R5, 
-                        offset_type: OffsetType::Immediate { 
-                            offset: 0 
+                instruction_type: ARMv5InstructionType::LoadStore {
+                    op: ARMv5LoadStoreOperation::LDRH,
+                    rd: RegNames::R12,
+                    am: AddressingMode {
+                        p: true, u: true, w: false,
+                        rn: RegNames::R5,
+                        offset_type: OffsetType::Immediate {
+                            offset: 0
                         }
                     }
                 }
@@ -916,13 +957,13 @@ mod tests {
             0x51db78d1,
             ARMv5Instruction {
                 condition: Condition::PL,
-                instruction_type: ARMv5InstructionType::LoadStore { 
-                    op: ARMv5LoadStoreOperation::LDRSB, 
-                    rd: RegNames::R7, 
-                    am: AddressingMode { 
-                        p: true, u: true, w: false, 
-                        rn: RegNames::R11, 
-                        offset_type: OffsetType::Immediate { 
+                instruction_type: ARMv5InstructionType::LoadStore {
+                    op: ARMv5LoadStoreOperation::LDRSB,
+                    rd: RegNames::R7,
+                    am: AddressingMode {
+                        p: true, u: true, w: false,
+                        rn: RegNames::R11,
+                        offset_type: OffsetType::Immediate {
                             offset: 129
                         }
                     }
@@ -933,14 +974,14 @@ mod tests {
             0x31d630f0,
             ARMv5Instruction {
                 condition: Condition::LO,
-                instruction_type: ARMv5InstructionType::LoadStore { 
-                    op: ARMv5LoadStoreOperation::LDRSH, 
-                    rd: RegNames::R3, 
-                    am: AddressingMode { 
-                        p: true, u: true, w: false, 
-                        rn: RegNames::R6, 
-                        offset_type: OffsetType::Immediate { 
-                            offset: 0 
+                instruction_type: ARMv5InstructionType::LoadStore {
+                    op: ARMv5LoadStoreOperation::LDRSH,
+                    rd: RegNames::R3,
+                    am: AddressingMode {
+                        p: true, u: true, w: false,
+                        rn: RegNames::R6,
+                        offset_type: OffsetType::Immediate {
+                            offset: 0
                         }
                     }
                 }
@@ -950,13 +991,13 @@ mod tests {
             0x143b6008,
             ARMv5Instruction {
                 condition: Condition::NE,
-                instruction_type: ARMv5InstructionType::LoadStore { 
-                    op: ARMv5LoadStoreOperation::LDRT, 
-                    rd: RegNames::R6, 
-                    am: AddressingMode { 
-                        p: false, u: false, w: true, 
-                        rn: RegNames::R11, 
-                        offset_type: OffsetType::Immediate { 
+                instruction_type: ARMv5InstructionType::LoadStore {
+                    op: ARMv5LoadStoreOperation::LDRT,
+                    rd: RegNames::R6,
+                    am: AddressingMode {
+                        p: false, u: false, w: true,
+                        rn: RegNames::R11,
+                        offset_type: OffsetType::Immediate {
                             offset: 8
                         }
                     }
@@ -967,13 +1008,13 @@ mod tests {
             0xc78d2065,
             ARMv5Instruction {
                 condition: Condition::GT,
-                instruction_type: ARMv5InstructionType::LoadStore { 
-                    op: ARMv5LoadStoreOperation::STR, 
-                    rd: RegNames::R2, 
-                    am: AddressingMode { 
-                        p: true, u: true, w: false, 
-                        rn: RegNames::SP, 
-                        offset_type: OffsetType::ScaledRegister { 
+                instruction_type: ARMv5InstructionType::LoadStore {
+                    op: ARMv5LoadStoreOperation::STR,
+                    rd: RegNames::R2,
+                    am: AddressingMode {
+                        p: true, u: true, w: false,
+                        rn: RegNames::SP,
+                        offset_type: OffsetType::ScaledRegister {
                             rm: RegNames::R5,
                             shift: ShiftType::ROR,
                             shift_imm: 0
@@ -986,13 +1027,13 @@ mod tests {
             0x57e1022a,
             ARMv5Instruction {
                 condition: Condition::PL,
-                instruction_type: ARMv5InstructionType::LoadStore { 
-                    op: ARMv5LoadStoreOperation::STRB, 
-                    rd: RegNames::R0, 
-                    am: AddressingMode { 
-                        p: true, u: true, w: true, 
-                        rn: RegNames::R1, 
-                        offset_type: OffsetType::ScaledRegister { 
+                instruction_type: ARMv5InstructionType::LoadStore {
+                    op: ARMv5LoadStoreOperation::STRB,
+                    rd: RegNames::R0,
+                    am: AddressingMode {
+                        p: true, u: true, w: true,
+                        rn: RegNames::R1,
+                        offset_type: OffsetType::ScaledRegister {
                             rm: RegNames::R10,
                             shift: ShiftType::LSR,
                             shift_imm: 4
@@ -1005,13 +1046,13 @@ mod tests {
             0x36e7b00b,
             ARMv5Instruction {
                 condition: Condition::LO,
-                instruction_type: ARMv5InstructionType::LoadStore { 
-                    op: ARMv5LoadStoreOperation::STRBT, 
-                    rd: RegNames::R11, 
-                    am: AddressingMode { 
-                        p: false, u: true, w: true, 
-                        rn: RegNames::R7, 
-                        offset_type: OffsetType::ScaledRegister { 
+                instruction_type: ARMv5InstructionType::LoadStore {
+                    op: ARMv5LoadStoreOperation::STRBT,
+                    rd: RegNames::R11,
+                    am: AddressingMode {
+                        p: false, u: true, w: true,
+                        rn: RegNames::R7,
+                        offset_type: OffsetType::ScaledRegister {
                             rm: RegNames::R11,
                             shift: ShiftType::LSL,
                             shift_imm: 0
@@ -1024,13 +1065,13 @@ mod tests {
             0x718850b3,
             ARMv5Instruction {
                 condition: Condition::VC,
-                instruction_type: ARMv5InstructionType::LoadStore { 
-                    op: ARMv5LoadStoreOperation::STRH, 
-                    rd: RegNames::R5, 
-                    am: AddressingMode { 
-                        p: true, u: true, w: false, 
-                        rn: RegNames::R8, 
-                        offset_type: OffsetType::Register { 
+                instruction_type: ARMv5InstructionType::LoadStore {
+                    op: ARMv5LoadStoreOperation::STRH,
+                    rd: RegNames::R5,
+                    am: AddressingMode {
+                        p: true, u: true, w: false,
+                        rn: RegNames::R8,
+                        offset_type: OffsetType::Register {
                             rm: RegNames::R3
                         }
                     }
@@ -1041,14 +1082,14 @@ mod tests {
             0xa4ac0000,
             ARMv5Instruction {
                 condition: Condition::GE,
-                instruction_type: ARMv5InstructionType::LoadStore { 
-                    op: ARMv5LoadStoreOperation::STRT, 
-                    rd: RegNames::R0, 
-                    am: AddressingMode { 
-                        p: false, u: true, w: true, 
-                        rn: RegNames::R12, 
-                        offset_type: OffsetType::Immediate { 
-                            offset: 0 
+                instruction_type: ARMv5InstructionType::LoadStore {
+                    op: ARMv5LoadStoreOperation::STRT,
+                    rd: RegNames::R0,
+                    am: AddressingMode {
+                        p: false, u: true, w: true,
+                        rn: RegNames::R12,
+                        offset_type: OffsetType::Immediate {
+                            offset: 0
                         }
                     }
                 }
@@ -1059,11 +1100,11 @@ mod tests {
             0x089eb130,
             ARMv5Instruction {
                 condition: Condition::EQ,
-                instruction_type: ARMv5InstructionType::LoadStoreMultiple { 
+                instruction_type: ARMv5InstructionType::LoadStoreMultiple {
                     op: ARMv5LoadStoreMultipleOperation::LDM,
-                    amm: AddressingModeMultiple { 
-                        p: false, u: true, w: false, 
-                        rn: RegNames::LR, 
+                    amm: AddressingModeMultiple {
+                        p: false, u: true, w: false,
+                        rn: RegNames::LR,
                         register_list: 0b1011000100110000
                     }
                 }
@@ -1073,11 +1114,11 @@ mod tests {
             0xe93a2024,
             ARMv5Instruction {
                 condition: Condition::AL,
-                instruction_type: ARMv5InstructionType::LoadStoreMultiple { 
+                instruction_type: ARMv5InstructionType::LoadStoreMultiple {
                     op: ARMv5LoadStoreMultipleOperation::LDM,
-                    amm: AddressingModeMultiple { 
-                        p: true, u: false, w: true, 
-                        rn: RegNames::R10, 
+                    amm: AddressingModeMultiple {
+                        p: true, u: false, w: true,
+                        rn: RegNames::R10,
                         register_list: 0b0010000000100100
                     }
                 }
@@ -1087,11 +1128,11 @@ mod tests {
             0x99a4d730,
             ARMv5Instruction {
                 condition: Condition::LS,
-                instruction_type: ARMv5InstructionType::LoadStoreMultiple { 
+                instruction_type: ARMv5InstructionType::LoadStoreMultiple {
                     op: ARMv5LoadStoreMultipleOperation::STM,
-                    amm: AddressingModeMultiple { 
-                        p: true, u: true, w: true, 
-                        rn: RegNames::R4, 
+                    amm: AddressingModeMultiple {
+                        p: true, u: true, w: true,
+                        rn: RegNames::R4,
                         register_list: 0b1101011100110000
                     }
                 }
@@ -1101,11 +1142,11 @@ mod tests {
             0xe8070180,
             ARMv5Instruction {
                 condition: Condition::AL,
-                instruction_type: ARMv5InstructionType::LoadStoreMultiple { 
+                instruction_type: ARMv5InstructionType::LoadStoreMultiple {
                     op: ARMv5LoadStoreMultipleOperation::STM,
-                    amm: AddressingModeMultiple { 
-                        p: false, u: false, w: false, 
-                        rn: RegNames::R7, 
+                    amm: AddressingModeMultiple {
+                        p: false, u: false, w: false,
+                        rn: RegNames::R7,
                         register_list: 0b0000000110000000
                     }
                 }
@@ -1116,8 +1157,8 @@ mod tests {
             0xd109e09e,
             ARMv5Instruction {
                 condition: Condition::LE,
-                instruction_type: ARMv5InstructionType::Synchronization { 
-                    op: ARMv5SynchronizationOperation::SWP, 
+                instruction_type: ARMv5InstructionType::Synchronization {
+                    op: ARMv5SynchronizationOperation::SWP,
                     rd: RegNames::LR, rm: RegNames::LR, rn: RegNames::R9
                 }
             }
@@ -1126,8 +1167,8 @@ mod tests {
             0x61472091,
             ARMv5Instruction {
                 condition: Condition::VS,
-                instruction_type: ARMv5InstructionType::Synchronization { 
-                    op: ARMv5SynchronizationOperation::SWPB, 
+                instruction_type: ARMv5InstructionType::Synchronization {
+                    op: ARMv5SynchronizationOperation::SWPB,
                     rd: RegNames::R2, rm: RegNames::R1, rn: RegNames::R7
                 }
             }
@@ -1137,7 +1178,7 @@ mod tests {
             0x1fdf055e,
             ARMv5Instruction {
                 condition: Condition::NE,
-                instruction_type: ARMv5InstructionType::Generic { 
+                instruction_type: ARMv5InstructionType::Generic {
                     op: ARMv5GenericOperation::SWI
                 }
             }
@@ -1146,7 +1187,7 @@ mod tests {
             0xe12a5373,
             ARMv5Instruction {
                 condition: Condition::AL,
-                instruction_type: ARMv5InstructionType::Generic { 
+                instruction_type: ARMv5InstructionType::Generic {
                     op: ARMv5GenericOperation::BKPT
                 }
             }
@@ -1155,7 +1196,7 @@ mod tests {
             0xe10f3000,
             ARMv5Instruction {
                 condition: Condition::AL,
-                instruction_type: ARMv5InstructionType::Generic { 
+                instruction_type: ARMv5InstructionType::Generic {
                     op: ARMv5GenericOperation::MRS
                 }
             }
@@ -1164,7 +1205,7 @@ mod tests {
             0x216ff004,
             ARMv5Instruction {
                 condition: Condition::HS,
-                instruction_type: ARMv5InstructionType::Generic { 
+                instruction_type: ARMv5InstructionType::Generic {
                     op: ARMv5GenericOperation::MSR
                 }
             }
@@ -1173,7 +1214,7 @@ mod tests {
             0x7efc574d,
             ARMv5Instruction {
                 condition: Condition::VC,
-                instruction_type: ARMv5InstructionType::Generic { 
+                instruction_type: ARMv5InstructionType::Generic {
                     op: ARMv5GenericOperation::CDP
                 }
             }
@@ -1182,7 +1223,7 @@ mod tests {
             0xfef1f64e,
             ARMv5Instruction {
                 condition: Condition::Unconditional,
-                instruction_type: ARMv5InstructionType::Generic { 
+                instruction_type: ARMv5InstructionType::Generic {
                     op: ARMv5GenericOperation::CDP2
                 }
             }
@@ -1191,7 +1232,7 @@ mod tests {
             0x8d904daa,
             ARMv5Instruction {
                 condition: Condition::HI,
-                instruction_type: ARMv5InstructionType::Generic { 
+                instruction_type: ARMv5InstructionType::Generic {
                     op: ARMv5GenericOperation::LDC
                 }
             }
@@ -1200,7 +1241,7 @@ mod tests {
             0xfd96bf7b,
             ARMv5Instruction {
                 condition: Condition::Unconditional,
-                instruction_type: ARMv5InstructionType::Generic { 
+                instruction_type: ARMv5InstructionType::Generic {
                     op: ARMv5GenericOperation::LDC2
                 }
             }
@@ -1209,7 +1250,7 @@ mod tests {
             0x9ee2c610,
             ARMv5Instruction {
                 condition: Condition::LS,
-                instruction_type: ARMv5InstructionType::Generic { 
+                instruction_type: ARMv5InstructionType::Generic {
                     op: ARMv5GenericOperation::MCR
                 }
             }
@@ -1218,7 +1259,7 @@ mod tests {
             0xfe4631b0,
             ARMv5Instruction {
                 condition: Condition::Unconditional,
-                instruction_type: ARMv5InstructionType::Generic { 
+                instruction_type: ARMv5InstructionType::Generic {
                     op: ARMv5GenericOperation::MCR2
                 }
             }
@@ -1227,7 +1268,7 @@ mod tests {
             0xeede8a3b,
             ARMv5Instruction {
                 condition: Condition::AL,
-                instruction_type: ARMv5InstructionType::Generic { 
+                instruction_type: ARMv5InstructionType::Generic {
                     op: ARMv5GenericOperation::MRC
                 }
             }
@@ -1236,7 +1277,7 @@ mod tests {
             0xfeb5d712,
             ARMv5Instruction {
                 condition: Condition::Unconditional,
-                instruction_type: ARMv5InstructionType::Generic { 
+                instruction_type: ARMv5InstructionType::Generic {
                     op: ARMv5GenericOperation::MRC2
                 }
             }
@@ -1245,7 +1286,7 @@ mod tests {
             0xdd80d4d5,
             ARMv5Instruction {
                 condition: Condition::LE,
-                instruction_type: ARMv5InstructionType::Generic { 
+                instruction_type: ARMv5InstructionType::Generic {
                     op: ARMv5GenericOperation::STC
                 }
             }
@@ -1254,7 +1295,7 @@ mod tests {
             0xfd8f052e,
             ARMv5Instruction {
                 condition: Condition::Unconditional,
-                instruction_type: ARMv5InstructionType::Generic { 
+                instruction_type: ARMv5InstructionType::Generic {
                     op: ARMv5GenericOperation::STC2
                 }
             }
