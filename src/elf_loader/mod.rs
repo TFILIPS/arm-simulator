@@ -42,7 +42,7 @@ impl ELFFile {
         }
 
         let (elf_header, encoding) =
-            ELFHeader::new(raw_data[0..ELFHeader::SIZE].try_into().unwrap())?;
+            ELFHeader::new(&raw_data[0..ELFHeader::SIZE])?;
 
         Ok(Self {
             elf_header,
@@ -51,7 +51,7 @@ impl ELFFile {
         })
     }
 
-    pub fn load_into_memory(&self, target: &mut dyn Memory) -> Result<(), String> {
+    pub fn load_into_memory(&self, target: &mut dyn Memory) -> Result<(), String> { // ALEX: nice Trait structuring :)
         let headers: Vec<ProgramHeader> = self.read_program_headers()?;
         for header in headers {
             if header.program_type != 1 {
@@ -65,15 +65,13 @@ impl ELFFile {
                 return Err(String::from("Error while loading memory! Check ELF file."));
             }
 
-            if let Err(_) = target.set_memory(address, &self.raw_data[file_start..file_end]) {
-                return Err(String::from("ELF file expects larger memory!"));
-            }
+            target.set_memory(address, &self.raw_data[file_start..file_end]).or(Err("ELF file expects larger memory"))?;
 
             if header.memory_size > header.file_size {
                 let padding: u32 = header.memory_size - header.file_size;
                 address += header.file_size;
 
-                if let Err(_) = target.set_memory(address, &vec![0; padding as usize]) {
+                if let Err(_) = target.set_memory(address, &vec![0; padding as usize]) { // ALEX: this is a repeat of (the now changed) line 68
                     return Err(String::from("ELF file expects larger memory!"));
                 }
             }
@@ -142,7 +140,7 @@ impl ELFFile {
             Err(ValueError::Machine) => Err(String::from("The ELF file is not ARM compatible!")),
             Err(ValueError::Class) => Err(String::from("The ELF file is not 32-bit compatible!")),
             Err(ValueError::OsAbi) => {
-                Err(String::from("The ELF files traget is not Unix-SystemV!"))
+                Err(String::from("The ELF file's target is not Unix-System!"))
             }
             Ok(_) => Ok(()),
         }

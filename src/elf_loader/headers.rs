@@ -7,7 +7,7 @@ pub enum ValueError { Version, Type, Machine, Class, OsAbi }
 
 #[repr(C)]
 pub struct ELFHeader {
-    pub elf_id: [u8; 16],
+    pub elf_id: [u8; 16], // ALEX: we could save some pain if this were simply a Vec<u8>
     pub elf_type: u16,
     pub machine: u16,
     pub elf_version: u32,
@@ -26,10 +26,10 @@ pub struct ELFHeader {
 impl ELFHeader {
     pub const SIZE: usize = size_of::<ELFHeader>();
 
-    pub fn new(bytes: [u8; ELFHeader::SIZE]) -> Result<(Self, Endian), String> {
+    pub fn new(bytes: &[u8]) -> Result<(Self, Endian), String> { // ALEX: changing `bytes` to a slice saves us one unwrap
         let elf_id: [u8; 16] = bytes[0..16].try_into().unwrap();
 
-        if elf_id[0..4] != ELF_ID || elf_id[6] != HEADER_VERSION_KEY {
+        if bytes[0..4] != ELF_ID || bytes[6] != HEADER_VERSION_KEY {
             return Err(String::from("The ELF file is not valid!"));
         }
 
@@ -46,7 +46,7 @@ impl ELFHeader {
         Ok((
             Self {
                 elf_id,
-                elf_type: slice_to_u16(&bytes[16..18], &enc),
+                elf_type: slice_to_u16(&bytes[16..18], &enc), // ALEX: nice idea with the util functions :)
                 machine: slice_to_u16(&bytes[18..20], &enc),
                 elf_version: slice_to_u32(&bytes[20..24], &enc),
                 entry_point: slice_to_u32(&bytes[24..28], &enc),
@@ -74,7 +74,7 @@ impl ELFHeader {
     ) -> Result<(), ValueError> {
         
         if self.elf_version != elf_version {
-            return Err(ValueError::Version);
+            return Err(ValueError::Version); // ALEX: this could be cleaner by creating custom error types [https://stackoverflow.com/questions/42584368/how-do-you-define-custom-error-types-in-rust]
         }
         if self.elf_type != elf_type {
             return Err(ValueError::Type);

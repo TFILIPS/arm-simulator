@@ -130,6 +130,7 @@ impl ExitBehaviour for ConsoleExit {
     }
 }
 
+#[derive(Debug)]
 pub struct MemoryException {
     pub address: usize, pub size: usize, pub msg: String
 }
