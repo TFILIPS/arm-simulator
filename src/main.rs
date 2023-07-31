@@ -1,7 +1,7 @@
-use std::{process::exit, env};
+use std::{env, process::exit};
 
 use elf_loader::ELFFile;
-use simulated_cpu::{SimulatedCPU, ARMv5CPU, names::RegNames};
+use simulated_cpu::{names::RegNames, ARMv5CPU, SimulatedCPU};
 use utils::{ConsoleExit, ConsoleOutput};
 
 mod elf_loader;
@@ -58,7 +58,7 @@ fn parse_arguments() -> (String, bool) {
     (path, disassemble)
 }
 
-fn print_and_exit<T>(msg: String) -> T { // ALEX: You could make this an impl for Result, saves you some boilerplate
+fn print_and_exit<T>(msg: String) -> T { // ALEX: You could make this a, which COULD save you some boilerplate. But I'm not 100% sure how exactly myself, will try later maybe
     eprintln!("{msg}");
     exit(1);
 }
