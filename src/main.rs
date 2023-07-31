@@ -58,7 +58,7 @@ fn parse_arguments() -> (String, bool) {
     (path, disassemble)
 }
 
-fn print_and_exit<T>(msg: String) -> T {
+fn print_and_exit<T>(msg: String) -> T { // ALEX: You could make this an impl for Result, saves you some boilerplate
     eprintln!("{msg}");
     exit(1);
 }
