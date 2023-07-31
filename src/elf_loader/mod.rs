@@ -109,7 +109,7 @@ impl ELFFile {
         Ok(labels)
     }
 
-    // todo make struct for relevant sections
+    // todo make struct for relevant sections // ALEX: good idea :)
     pub fn get_text_section_range(&self) -> Result<(u32, u32), String> {
         let headers: Vec<SectionHeader> = self.read_section_headers()?;
 
@@ -120,7 +120,7 @@ impl ELFFile {
             let str_start: usize = header.section_name as usize;
             if let Some((s, _)) = str_table[str_start..].split_once('\0') {
                 if s == ".text" {
-                    return Ok((header.address, header.address + header.size));
+                    return Ok((header.address, header.address + header.size)); // ALEX: can we have multilpe .text sections?
                 }
             }
         }
@@ -140,7 +140,7 @@ impl ELFFile {
             Err(ValueError::Machine) => Err(String::from("The ELF file is not ARM compatible!")),
             Err(ValueError::Class) => Err(String::from("The ELF file is not 32-bit compatible!")),
             Err(ValueError::OsAbi) => {
-                Err(String::from("The ELF file's target is not Unix-System!"))
+                Err(String::from("The ELF file's target is not Unix-System V!"))
             }
             Ok(_) => Ok(()),
         }
