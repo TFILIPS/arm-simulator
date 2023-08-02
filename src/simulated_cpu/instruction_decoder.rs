@@ -11,7 +11,8 @@ pub trait InstructionDecoder<I: Instruction<C, S>, C: SimulatedCPU<S>, S> {
     fn decode(instruction_bits: u32) -> I;
 }
 
-//Todo: refactor condition
+// ToDo: Refactor condition
+// ToDo: Try to use memorization
 //https://developer.arm.com/documentation/ddi0406/c/Application-Level-Architecture/ARM-Instruction-Set-Encoding/ARM-instruction-set-encoding?lang=en
 pub struct ARMv5Decoder;
 impl InstructionDecoder<ARMv5Instruction, ARMv5CPU, i32> for ARMv5Decoder {

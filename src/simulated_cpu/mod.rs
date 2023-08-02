@@ -1,6 +1,6 @@
-use std::{io::Write, collections::HashMap};
+use std::{io::Write, collections::HashMap, result};
 
-use instructions::Instruction;
+use instructions::{Instruction, ARMv5Instruction};
 use names::{RegNames, FlagNames};
 use instruction_decoder::{InstructionDecoder, ARMv5Decoder};
 
@@ -41,38 +41,9 @@ pub struct ARMv5CPU {
 }
 impl SimulatedCPU<i32> for ARMv5CPU {
     fn step(&mut self) -> Result<(), SimulationException> {
-        let mut result: Result<(), SimulationException> = Ok(());
-
         let address: u32 = self.registers[RegNames::PC] as u32;
-        match self.get_memory(address, 4) {
-            Ok(bytes) => {
-                let bits: u32 = slice_to_u32(&bytes, &self.encoding);
-                let instruction: Box<dyn Instruction<ARMv5CPU, i32>> = 
-                    Box::new(ARMv5Decoder::decode(bits));
-
-                if let Err(err) = instruction.execute(self) {
-                    //Clarify returned error message
-                    result = Err(SimulationException { 
-                        kind: err.kind, 
-                        msg: format!(
-                            "Exception caused by instruction at 0x{:X}: {}\n", 
-                            address,err.msg
-                        )
-                    });
-                }
-            },
-            Err(mem_err) => {
-                //Convert and clarify returned error message
-                let sim_err: SimulationException = mem_err.into();
-                result = Err(SimulationException { 
-                    kind: sim_err.kind, 
-                    msg: format!(
-                        "Unable to fetch instruction at address 0x{:X}!\n",
-                        address
-                    )
-                });
-            }
-        }
+        let result: Result<(), SimulationException> = 
+            self.load_and_exectue_instruction(address);
 
         if let Err(err) = &result {
             self.output_device.output_err(&err.msg);
@@ -94,13 +65,15 @@ impl SimulatedCPU<i32> for ARMv5CPU {
         let mut buffer: Vec<u8> = Vec::new();
         let label_map: HashMap<u32, String> = labels.into_iter().collect();
 
+        // ToDo: Return a list of tupels instead of a single string
         for address in (start..end).step_by(4) {
             if let Some(label) = label_map.get(&address) {
                 writeln!(buffer, "-------- | {label}:").unwrap();
             }
 
-            let address: usize = address as usize;
-            let bytes: &[u8] = &self.memory[address..address+4];
+            // ToDo: Better error handling
+            let bytes: &[u8] = &self.get_memory(address, 4)
+                .expect("Memory access out of bounds!");
             let bits: u32 = slice_to_u32(&bytes, &self.encoding);
 
             let instruction: Box<dyn Instruction<ARMv5CPU, i32>> = 
@@ -202,15 +175,52 @@ impl ARMv5CPU {
             msg: "Memory access out of bounds!".to_string()
         })
     }
+
+    fn load_and_exectue_instruction(
+        &mut self, address: u32
+    ) -> Result<(), SimulationException>{
+        match self.get_memory(address, 4) {
+            Ok(bytes) => {
+                let bits: u32 = slice_to_u32(&bytes, &self.encoding);
+                let instruction: ARMv5Instruction = ARMv5Decoder::decode(bits);
+
+                instruction.execute(self).or_else(|err|
+                    //Clarify returned error message
+                    Err(SimulationException {
+                        kind: err.kind,
+                        msg: format!(
+                            "Exception caused by instruction at 0x{:X}: {}\n",
+                            address, err.msg
+                        )
+                    })
+                )
+            }
+            Err(mem_err) => {
+                //Convert and clarify returned error message
+                let sim_err: SimulationException = mem_err.into();
+                Err(SimulationException {
+                    kind: sim_err.kind,
+                    msg: format!(
+                        "Unable to fetch instruction at address 0x{:X}!\n",
+                        address
+                    )
+                })
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
 pub enum SimulationExceptionKind {
     DataAbort{memory_address: usize, size: usize}, 
-    UnsupportedInstruction, UndefinedInstruction
+    UnsupportedInstruction, 
+    UndefinedInstruction
 }
 #[derive(Debug)]
-pub struct SimulationException { kind: SimulationExceptionKind, msg: String }
+pub struct SimulationException { 
+    kind: SimulationExceptionKind, 
+    msg: String 
+}
 impl From<MemoryException> for SimulationException {
     fn from(value: MemoryException) -> Self {
         SimulationException { 

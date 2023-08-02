@@ -20,27 +20,26 @@ pub struct ELFHeader {
     pub num_program_headers: u16,
     pub section_header_size: u16,
     pub num_section_headers: u16,
-    pub section_str_table_idx: u16,
+    pub section_str_table_idx: u16
 }
 
 impl ELFHeader {
     pub const SIZE: usize = size_of::<ELFHeader>();
 
-    pub fn new(bytes: [u8; ELFHeader::SIZE]) -> Result<(Self, Endian), String> {
-        let elf_id: [u8; 16] = bytes[0..16].try_into().unwrap();
+    pub fn new(bytes: &[u8]) -> Result<(Self, Endian), &'static str> {
+        let elf_id: [u8; 16] = bytes[0..16].try_into().or(
+            Err("The provided ELF file is too short to be valid!")
+        )?;
 
+        // Why the change from elf_id to bytes? (Alex)
         if elf_id[0..4] != ELF_ID || elf_id[6] != HEADER_VERSION_KEY {
-            return Err(String::from("The ELF file is not valid!"));
+            return Err("The ELF file is not valid!");
         }
 
         let enc: Endian = match elf_id[5] {
             1 => Endian::Little,
             2 => Endian::Big,
-            _ => {
-                return {
-                    Err(String::from("The ELF file has an invalid encoding!"))
-                }
-            }
+            _ => return Err("The ELF file has an invalid encoding!")
         };
 
         Ok((
@@ -72,7 +71,7 @@ impl ELFHeader {
         class: u8,
         os_abi: u8
     ) -> Result<(), ValueError> {
-        
+        // ToDo: Custom error type: [https://stackoverflow.com/questions/42584368/how-do-you-define-custom-error-types-in-rust]
         if self.elf_version != elf_version {
             return Err(ValueError::Version);
         }
@@ -140,7 +139,7 @@ pub struct SectionHeader {
     pub link: u32,
     pub info: u32,
     pub address_align: u32,
-    pub entrie_size: u32
+    pub entry_size: u32
 }
 impl ELFTableEntry for SectionHeader {
     const SIZE: usize = size_of::<SectionHeader>();
@@ -159,7 +158,7 @@ impl ELFTableEntry for SectionHeader {
             link: slice_to_u32(&bytes[24..28], encoding),
             info: slice_to_u32(&bytes[28..32], encoding),
             address_align: slice_to_u32(&bytes[32..36], encoding),
-            entrie_size:slice_to_u32(&bytes[36..40], encoding)
+            entry_size:slice_to_u32(&bytes[36..40], encoding)
         }
     }
 }
