@@ -1257,6 +1257,14 @@ mod tests {
                     op: ARMv5GenericOperation::STC2
                 }
             }
+        ),
+
+        undefined: (
+            0xec518764,
+            ARMv5Instruction {
+                condition: Condition::AL,
+                instruction_type: ARMv5InstructionType::Undefined
+            }
         )
     }
 }

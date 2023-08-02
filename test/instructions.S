@@ -68,4 +68,7 @@ _start:
     MRC p10, #6, r8, c14, c11, #1
     MRC2 p7, #5, r13, c5, c2
     STCLE p4, c13, [r0, #852]
-    STC2 p5, c0, [pc, #184]  
+    STC2 p5, c0, [pc, #184]
+
+    //Not in armv5 used for unidentified instructions
+    MRRC p7, #6, R8, R1, c4
