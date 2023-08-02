@@ -130,6 +130,8 @@ impl ExitBehaviour for ConsoleExit {
     }
 }
 
+// ToDo: implement Error [https://stackoverflow.com/questions/42584368/how-do-you-define-custom-error-types-in-rust]
+#[derive(Debug)]
 pub struct MemoryException {
     pub address: usize, pub size: usize, pub msg: String
 }
@@ -142,4 +144,17 @@ pub trait Memory {
     fn set_memory(
         &mut self, address: u32, bytes: &[u8]
     ) -> Result<(), MemoryException>;
+}
+
+pub trait ExitOnError<T> {
+    fn unwarp_or_exit(self) -> T;
+}
+
+impl<T> ExitOnError<T> for Result<T, &'static str> {
+    fn unwarp_or_exit(self) -> T {
+        self.unwrap_or_else(|msg| {
+            eprintln!("{msg}");
+            exit(1);
+        })
+    }
 }

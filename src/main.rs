@@ -2,7 +2,7 @@ use std::{process::exit, env};
 
 use elf_loader::ELFFile;
 use simulated_cpu::{SimulatedCPU, ARMv5CPU, names::RegNames};
-use utils::{ConsoleExit, ConsoleOutput};
+use utils::{ConsoleExit, ConsoleOutput, ExitOnError};
 
 mod elf_loader;
 mod simulated_cpu;
@@ -13,20 +13,20 @@ const DEFAULT_STACK_POINTER: u32 = 0x400000;
 fn main() {
     let (path, disassemble): (String, bool) = parse_arguments();
 
-    let elf_file: ELFFile = ELFFile::load(&path).unwrap_or_else(print_and_exit);
-    elf_file.check_header_values().unwrap_or_else(print_and_exit);
+    let elf_file: ELFFile = ELFFile::load(&path).unwarp_or_exit();
+    elf_file.check_header_values().unwarp_or_exit();
     
     let mut cpu: ARMv5CPU = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
     cpu.set_register(RegNames::PC, elf_file.get_entry_point() as i32);
     cpu.set_register(RegNames::SP, DEFAULT_STACK_POINTER as i32);
     cpu.set_encoding(elf_file.get_encoding());
-    elf_file.load_into_memory(&mut cpu).unwrap_or_else(print_and_exit);
+    elf_file.load_into_memory(&mut cpu).unwarp_or_exit();
 
     if disassemble {
         let (text_start, text_end): (u32, u32) = 
-            elf_file.get_text_section_range().unwrap_or_else(print_and_exit);
+            elf_file.get_text_section_range().unwarp_or_exit();
         let labels: Vec<(u32, String)> = 
-            elf_file.get_labels().unwrap_or_else(print_and_exit);
+            elf_file.get_labels().unwarp_or_exit();
         print!("{}", cpu.disassemble_memory(text_start, text_end, labels));
     }
     else { 
@@ -56,9 +56,4 @@ fn parse_arguments() -> (String, bool) {
         }
     }
     (path, disassemble)
-}
-
-fn print_and_exit<T>(msg: String) -> T {
-    eprintln!("{msg}");
-    exit(1);
 }
