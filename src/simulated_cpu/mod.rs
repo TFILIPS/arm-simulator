@@ -1,4 +1,4 @@
-use std::{io::Write, collections::HashMap, result};
+use std::{io::Write, collections::HashMap};
 
 use instructions::{Instruction, ARMv5Instruction};
 use names::{RegNames, FlagNames};
