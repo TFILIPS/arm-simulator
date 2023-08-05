@@ -382,7 +382,7 @@ impl ARMv5CPU {
         if s {
             self.flags[FlagNames::N] = result < 0;
             self.flags[FlagNames::Z] = result == 0;
-            self.flags[FlagNames::C] = (result as u32) < (a as u32);
+            self.flags[FlagNames::C] = (result as u32) <= (a as u32);
             self.flags[FlagNames::V] = overflow;
         }
 
@@ -401,7 +401,7 @@ impl ARMv5CPU {
         if s {
             self.flags[FlagNames::N] = result < 0;
             self.flags[FlagNames::Z] = result == 0;
-            self.flags[FlagNames::C] = (result as u32) < (b as u32);
+            self.flags[FlagNames::C] = (result as u32) <= (b as u32);
             self.flags[FlagNames::V] = overflow;
         }
 
@@ -451,6 +451,7 @@ impl ARMv5CPU {
         Ok(())
     }
 
+    //here to do correct c flag
     fn sbc(
         &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
     ) -> Result<(), SimulationException> {
@@ -465,14 +466,14 @@ impl ARMv5CPU {
         if s {
             self.flags[FlagNames::N] = result < 0;
             self.flags[FlagNames::Z] = result == 0;
-            self.flags[FlagNames::C] = 
-                (result as u32) <= (a as u32) && (b != 0 || c != 0);
+            self.flags[FlagNames::C] = (result as u32) <= (a as u32);
             self.flags[FlagNames::V] = o1 || o2;
         }
 
         Ok(())
     }
 
+    //here to do correct c flag
     fn rsc(
         &mut self, s: bool, rn: RegNames, rd: RegNames, so: ShifterOperand
     ) -> Result<(), SimulationException> {
@@ -487,8 +488,7 @@ impl ARMv5CPU {
         if s {
             self.flags[FlagNames::N] = result < 0;
             self.flags[FlagNames::Z] = result == 0;
-            self.flags[FlagNames::C] = 
-                (result as u32) <= (b as u32) && (a != 0 || c != 0);
+            self.flags[FlagNames::C] = (result as u32) <= (b as u32);
             self.flags[FlagNames::V] = o1 || o2;
         }
 
@@ -535,7 +535,8 @@ impl ARMv5CPU {
 
         self.flags[FlagNames::N] = result < 0;
         self.flags[FlagNames::Z] = result == 0;
-        self.flags[FlagNames::C] = (result as u32) < (a as u32);
+        // TODO: check with Alex if this is correct
+        self.flags[FlagNames::C] = (result as u32) <= (a as u32);
         self.flags[FlagNames::V] = overflow;
 
         Ok(())
@@ -1224,7 +1225,7 @@ mod tests {
         sbc_test_3: 
             (i32::MIN + 1, 1, T, 0, F, i32::MAX, [F, F, T, T]),
         sbc_test_4: 
-            (10, 1, T, 1, T, 10, [F; 4]),
+            (10, 1, T, 1, T, 10, [F, F, T, F]),
         sbc_test_5: 
             (3, 2, F, 0, F, 0, [F; 4])
     }

@@ -1,0 +1,27 @@
+Initialisiere Array mit zufälligen Daten.
+61a46ed6
+3c4c9557
+1a664844
+1029ad2d
+7250a262
+379b2ff3
+3ea1a4b0
+7b20ef29
+589a82ae
+0e2ed84f
+2bf45bdc
+133054e5
+33901bba
+08aaaa6b
+2a5959c8
+7a165a61
+53143986
+0cc78247
+048e4a74
+54fd3b9d
+Das maximale Element ist:
+7b20ef29
+Das minimale Element ist:
+048e4a74
+Die Summe aller Elemente ist:
+6c2f27b6

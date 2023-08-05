@@ -1,0 +1,17 @@
+Vektor A    Vektor B     Aᵢ * Bᵢ
+--------    --------    --------
+0000027a    00000dd3    00223c8e
+fffffdf0    fffff8f2    000e8ce0
+fffffbf3    fffff079    003ee5db
+0000075c    fffff585    ffb2decc
+fffff678    fffff948    004009c0
+00000939    00000e03    008139ab
+00000506    00000f92    004e376c
+00000c06    fffff9f0    ffb71ba0
+000003a3    fffff7e7    ffe28d15
+00000968    000006a1    003e5a68
+fffffe33    00000154    fffd9bbc
+00000557    fffffa46    ffe16bca
+                        --------
+  Gewünschtes Ergebnis: 00e9138f
+  Ihre Implementierung: 00e9138f

@@ -24,9 +24,19 @@ pub struct ARMSimulator {
 
 #[cfg(not(target_family = "wasm"))]
 impl ARMSimulator { 
-    pub fn new(elf_bytes: &[u8]) -> Result<ARMSimulator, String> {
+    pub fn from_bytes(elf_bytes: &[u8]) -> Result<ARMSimulator, String> {
 
         let elf_file: ELFFile = ARMSimulator::get_loaded_elf_file(elf_bytes)?;
+
+        let simulated_cpu: Box<dyn SimulatedCPU<i32>> = 
+            ARMSimulator::get_new_cpu(&elf_file, DEFAULT_SP)?;
+
+        Ok(ARMSimulator { elf_file, simulated_cpu })
+    }
+
+    pub fn from_file(path: &str) -> Result<ARMSimulator, String> {
+        let elf_file: ELFFile = ELFFile::load(path)?;
+        elf_file.check_header_values()?;
 
         let simulated_cpu: Box<dyn SimulatedCPU<i32>> = 
             ARMSimulator::get_new_cpu(&elf_file, DEFAULT_SP)?;
@@ -42,6 +52,10 @@ impl ARMSimulator {
 
     pub fn step(&mut self) -> Result<(), SimulationException> {
         self.simulated_cpu.step()
+    }
+
+    pub fn get_flags(&self) -> Vec<bool> {
+        Vec::from(self.simulated_cpu.get_flags())
     }
 
 
@@ -129,6 +143,14 @@ impl ARMSimulator {
 
     pub fn get_registers(&self) -> Vec<i32> {
         Vec::from(self.simulated_cpu.get_registers())
+    }
+
+    pub fn get_register(&self, reg_num: u32) -> i32 {
+        self.simulated_cpu.get_register(reg_num.into())
+    }
+
+    pub fn set_register(&mut self, reg: u32, value: i32) {
+        self.simulated_cpu.set_register(reg.into(), value);
     }
 
     pub fn get_program_counter(&self) -> u32 { 
