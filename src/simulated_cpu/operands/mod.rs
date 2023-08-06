@@ -192,3 +192,214 @@ impl ARMv5CPU {
         range.step_by(4)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::simulated_cpu::{
+        SimulatedCPU, ARMv5CPU, names::{FlagNames, RegNames}, 
+        operands::{OffsetType, AddressingModeMultiple}
+    };
+    use crate::utils::{ConsoleOutput, ConsoleExit, T, F};
+    use super::{ShifterOperand, barrel_shifter::ShiftType, AddressingMode};
+
+    macro_rules! shifter_operand_tests {
+        ($($test_name:ident: $test_values:expr), *) 
+        => {$(
+            #[test]
+            fn $test_name() {
+                #[allow(overflowing_literals)]
+                let (so, val_in, shift, c_in, val_out, c_out) = $test_values;
+
+                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+
+                match so {
+                    ShifterOperand::ImmediateShift { rm, .. } => {
+                        cpu.set_register(rm, val_in);
+                    },
+                    ShifterOperand::RegisterShift { rm, rs, .. } => {
+                        cpu.set_register(rm, val_in);
+                        cpu.set_register(rs, shift);
+                    }
+                    _ => {}
+                }
+                cpu.set_flag(FlagNames::C, c_in);
+
+                let (res_val, res_c) = cpu.perform_shift(so);
+
+                assert_eq!(val_out, res_val as u32);
+                assert_eq!(c_out, res_c);
+            }
+        )*}
+    }
+
+    shifter_operand_tests! {
+        shifter_operand_test_1: (
+            ShifterOperand::Immediate { 
+                rotate: 11, immediate: 197 
+            }, 
+            0, 0, F, 0x0003_1400, F
+        ),
+        shifter_operand_test_2: (
+            ShifterOperand::ImmediateShift { 
+                shift_amount: 26, shift: ShiftType::LSR, rm: RegNames::R7 
+            }, 
+            0xCF2A_C100, 0, F, 51, T
+        ),
+        shifter_operand_test_3: (
+            ShifterOperand::RegisterShift { 
+                rs: RegNames::LR, shift: ShiftType::ROR, rm: RegNames::LR 
+            }, 
+            0x8A9B_DAEC, 0x8A9B_DAEC, F, 0xAEC8A9BD, T
+        ),
+        shifter_operand_test_4: (
+            ShifterOperand::RegisterShift { 
+                rs: RegNames::R2, shift: ShiftType::ASR, rm: RegNames::R11 
+            }, 
+            0x80D3_1E6E, 0, T, 0x80D3_1E6E, T
+        ),
+        shifter_operand_test_5: (
+            ShifterOperand::ImmediateShift { 
+                shift_amount: 0, shift: ShiftType::ROR, rm: RegNames::R1
+            }, 
+            0x7298_6CBC, 0, T, 0xB94C365E, F
+        )
+    }
+
+    
+    macro_rules! addressing_mode_tests {
+        ($($test_name:ident: $test_values:expr),*) 
+        => {$(
+            #[test]
+            fn $test_name() {
+                #[allow(overflowing_literals)]
+                let (am, addr_in, offset_in, addr_out, addr_mem) = $test_values;
+
+                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+                cpu.set_register(am.rn, addr_in);
+
+                match am.offset_type {
+                    OffsetType::Register { rm } => {
+                        cpu.set_register(rm, offset_in);
+                    },
+                    OffsetType::ScaledRegister { rm, .. } => {
+                        cpu.set_register(rm, offset_in);
+                    },
+                    _ => {}
+                }
+
+                let res_addr = cpu.compute_modify_address(am);
+
+                assert_eq!(addr_out, res_addr as u32);
+                assert_eq!(addr_mem, cpu.get_register(am.rn) as u32);
+            }
+        )*}
+    }
+
+    addressing_mode_tests! {
+        addressing_mode_test_1: (
+            AddressingMode {
+                p: T, u: T, w: F, rn: RegNames::R5,
+                offset_type: OffsetType::Immediate {
+                    offset: 0x40A6
+                }
+            }, 0x0267_B018, 0x0000_0000, 0x0267_F0BE, 0x0267_B018
+        ),
+        addressing_mode_test_2: (
+            AddressingMode {
+                p: T, u: F, w: F, rn: RegNames::R8,
+                offset_type: OffsetType::Register { 
+                    rm: RegNames::LR
+                }
+            }, 0x0196_608F, 0x0009_4AB9, 0x018D_15D6, 0x0196_608F
+        ),
+        addressing_mode_test_3: (
+            AddressingMode {
+                p: F, u: T, w: T, rn: RegNames::PC,
+                offset_type: OffsetType::ScaledRegister { 
+                    shift_imm: 11, shift: ShiftType::LSR, 
+                    rm: RegNames::R4 
+                }
+            }, 0x01F1_7621, 0xFF9F_14FF, 0x01F1_7629, 0x0211_6A0B
+        ),
+        addressing_mode_test_4: (
+            AddressingMode {
+                p: T, u: F, w: T, rn: RegNames::R9,
+                offset_type: OffsetType::Immediate {
+                    offset: 0x0005
+                }
+            }, 0x0000_0000, 0x0000_0000, 0xFFFF_FFFB, 0xFFFF_FFFB
+        ),
+        addressing_mode_test_5: (
+            AddressingMode {
+                p: F, u: T, w: T, rn: RegNames::R6,
+                offset_type: OffsetType::ScaledRegister { 
+                    shift_imm: 7, shift: ShiftType::LSL, 
+                    rm: RegNames::PC 
+                }
+            }, 0xFFFF_FFFF, 0x0000_0002, 0xFFFF_FFFF, 0x0000_04FF
+        )
+    }
+
+
+    macro_rules! addressing_mode_multiple_tests {
+        ($($test_name:ident: $test_values:expr),*) 
+        => {$(
+            #[test]
+            fn $test_name() {
+                #[allow(overflowing_literals)]
+                let (amm, addr_in, addr_mem, addrs_out) = $test_values;
+
+                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+                cpu.set_register(amm.rn, addr_in);
+
+                let res_addrs = cpu.compute_modify_address_multiple(&amm);
+
+                for (i, res_addr) in res_addrs.enumerate() {
+                    assert_eq!(addrs_out[i], res_addr, "res_addr_id: {i}");
+                }
+                assert_eq!(addr_mem, cpu.get_register(amm.rn) as u32);
+
+            }
+        )*}
+    }
+
+    addressing_mode_multiple_tests! {
+        addressing_mode_multiple_test_1: (
+            AddressingModeMultiple {
+                p: T, u: T, w: F, rn: RegNames::R5,
+                register_list: 0x3A46
+            }, 0x02A2_E28D, 0x02A2_E28D, [
+                0x02A2_E291, 0x02A2_E295, 0x02A2_E299, 0x02A2_E29D,
+                0x02A2_E2A1, 0x02A2_E2A5, 0x02A2_E2A9
+            ]
+        ),
+        addressing_mode_multiple_test_2: (
+            AddressingModeMultiple {
+                p: T, u: F, w: T, rn: RegNames::R0,
+                register_list: 0x9E9B
+            }, 0x0252_BC7A, 0x0252_BC52, [
+                0x0252_BC52, 0x0252_BC56, 0x0252_BC5A, 0x0252_BC5E,
+                0x0252_BC62, 0x0252_BC66, 0x0252_BC6A, 0x0252_BC6E,
+                0x0252_BC72, 0x0252_BC76
+            ]
+        ),
+        addressing_mode_multiple_test_3: (
+            AddressingModeMultiple {
+                p: F, u: T, w: F, rn: RegNames::R9,
+                register_list: 0x208A
+            }, 0x000B_B297, 0x000B_B297, [
+                0x000B_B297, 0x000B_B29B, 0x000B_B29F, 0x000B_B2A3
+            ]
+        ),
+        addressing_mode_multiple_test_4: (
+            AddressingModeMultiple {
+                p: F, u: F, w: T, rn: RegNames::SP,
+                register_list: 0x6C03
+            }, 0x0043_002B, 0x0043_0013, [
+                0x0043_0017, 0x0043_001B, 0x0043_001F, 0x0043_0023, 
+                0x0043_0027, 0x0043_002B
+            ]
+        )
+    }
+}
+
