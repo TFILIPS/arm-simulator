@@ -63,7 +63,8 @@ impl ARMSimulator {
         elf_file: &ELFFile, stack_pointer: u32
     ) -> Result<Box<dyn SimulatedCPU<i32>>, String> {
 
-        let mut cpu: ARMv5CPU = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+        let mut cpu: ARMv5CPU = 
+            ARMv5CPU::new(ConsoleOutput::new(), ConsoleExit);
 
         cpu.set_register(RegNames::PC, elf_file.get_entry_point() as i32);
         cpu.set_register(RegNames::SP, stack_pointer as i32);
@@ -193,13 +194,19 @@ struct WebOutput {
     print_err: js_sys::Function
 }
 impl OutputDevice for WebOutput {
-    fn output(&self, msg: &str) {
+    fn output(&mut self, bytes: &[u8]) {
+        let msg: &str = &String::from_utf8_lossy(bytes);
         self.print.call1(&JsValue::NULL, &JsValue::from_str(msg))
             .expect("Error while trying to execute js function print!");
     }
-    fn output_err(&self, err: &str) {
+    fn output_err(&mut self, bytes: &[u8]) {
+        let err: &str = &String::from_utf8_lossy(bytes);
         self.print_err.call1(&JsValue::NULL, &JsValue::from_str(err))
             .expect("Error while trying to execute js function print_err!");
+    }
+
+    fn flush(&mut self) {
+        // Do nothing
     }
 }
 

@@ -46,7 +46,7 @@ impl SimulatedCPU<i32> for ARMv5CPU {
             self.load_and_exectue_instruction(address);
 
         if let Err(err) = &result {
-            self.output_device.output_err(&err.msg);
+            self.output_device.output_err(&err.msg.as_bytes());
             self.exit_behaviour.exit(-1);
         }
         

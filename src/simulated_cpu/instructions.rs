@@ -995,9 +995,7 @@ impl ARMv5CPU {
                     self.get_register_intern(RegNames::R2) as u32 as usize;
                 let a: usize = 
                     self.get_register_intern(RegNames::R1) as u32 as usize;
-                self.output_device.output(
-                    &String::from_utf8_lossy(&self.memory[a..a+l])
-                );
+                self.output_device.output(&self.memory[a..a+l]);
             },
             (x, 1) => self.exit_behaviour.exit(x),
             (_, _) => ()
@@ -1114,7 +1112,7 @@ mod tests {
             fn $test_name() {
                 let (a, b, s, shift, c_in, result, exp_flags) = $test_values;
 
-                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+                let mut cpu = ARMv5CPU::new(ConsoleOutput::new(), ConsoleExit);
                 cpu.set_register(RegNames::R1, a);
                 cpu.set_register(RegNames::R2, b);
                 cpu.flags[FlagNames::C] = c_in;
@@ -1363,7 +1361,7 @@ mod tests {
             fn $test_name() {
                 let (a, b, c, d, s, res_lo, res_hi, exp_flags) = $test_values;
 
-                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+                let mut cpu = ARMv5CPU::new(ConsoleOutput::new(), ConsoleExit);
                 cpu.set_register(RegNames::R0, a);
                 cpu.set_register(RegNames::R1, b);
                 cpu.set_register(RegNames::R2, c);
@@ -1471,7 +1469,7 @@ mod tests {
             fn $test_name() {
                 let (a, result) = $test_values;
 
-                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+                let mut cpu = ARMv5CPU::new(ConsoleOutput::new(), ConsoleExit);
                 cpu.set_register(RegNames::R0, a);
 
                 cpu.$function(RegNames::R1, RegNames::R0).unwrap();
@@ -1499,7 +1497,7 @@ mod tests {
                 #[allow(overflowing_literals)]
                 let (bo, pc, reg_val, l, exp_pc, exp_lr) = $test_values;
 
-                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+                let mut cpu = ARMv5CPU::new(ConsoleOutput::new(), ConsoleExit);
                 cpu.set_register(RegNames::PC, pc);
                 if let BranchOperator::Register(rm) = bo {
                     cpu.set_register(rm, reg_val);
@@ -1556,7 +1554,7 @@ mod tests {
             fn $test_name() {
                 let (bytes, addr, offset, enc, pc, result) = $test_values;
 
-                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+                let mut cpu = ARMv5CPU::new(ConsoleOutput::new(), ConsoleExit);
                 cpu.set_encoding(enc);
                 cpu.set_register(RegNames::R1, addr);
                 let am = AddressingMode {
@@ -1658,7 +1656,7 @@ mod tests {
             fn $test_name() {
                 let (value, address, offset, encoding, result) = $test_values;
 
-                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+                let mut cpu = ARMv5CPU::new(ConsoleOutput::new(), ConsoleExit);
                 cpu.set_encoding(encoding);
                 cpu.set_register(RegNames::R0, value);
                 cpu.set_register(RegNames::R1, address);
@@ -1737,7 +1735,7 @@ mod tests {
             fn $test_name() {
                 let (bytes, address, encoding, result) = $test_values;
 
-                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+                let mut cpu = ARMv5CPU::new(ConsoleOutput::new(), ConsoleExit);
                 cpu.set_encoding(encoding);
                 cpu.set_register(RegNames::R1, address);
                 let amm = AddressingModeMultiple {
@@ -1775,7 +1773,7 @@ mod tests {
             fn $test_name() {
                 let (values, address, encoding, result) = $test_values;
 
-                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+                let mut cpu = ARMv5CPU::new(ConsoleOutput::new(), ConsoleExit);
                 cpu.set_encoding(encoding);
                 cpu.set_register(RegNames::R1, address);
                 let amm = AddressingModeMultiple {
@@ -1811,7 +1809,7 @@ mod tests {
                 let (vreg, vmem, addr, enc, sreg, rreg, rmem) = $test_values;
                 let source = if sreg { RegNames::R1 } else { RegNames::R2 };
 
-                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+                let mut cpu = ARMv5CPU::new(ConsoleOutput::new(), ConsoleExit);
                 cpu.set_encoding(enc);
 
                 cpu.set_register(RegNames::R0, addr);

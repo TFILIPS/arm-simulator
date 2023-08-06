@@ -210,7 +210,7 @@ mod tests {
                 #[allow(overflowing_literals)]
                 let (so, val_in, shift, c_in, val_out, c_out) = $test_values;
 
-                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+                let mut cpu = ARMv5CPU::new(ConsoleOutput::new(), ConsoleExit);
 
                 match so {
                     ShifterOperand::ImmediateShift { rm, .. } => {
@@ -274,7 +274,7 @@ mod tests {
                 #[allow(overflowing_literals)]
                 let (am, addr_in, offset_in, addr_out, addr_mem) = $test_values;
 
-                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+                let mut cpu = ARMv5CPU::new(ConsoleOutput::new(), ConsoleExit);
                 cpu.set_register(am.rn, addr_in);
 
                 match am.offset_type {
@@ -349,7 +349,7 @@ mod tests {
                 #[allow(overflowing_literals)]
                 let (amm, addr_in, addr_mem, addrs_out) = $test_values;
 
-                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+                let mut cpu = ARMv5CPU::new(ConsoleOutput::new(), ConsoleExit);
                 cpu.set_register(amm.rn, addr_in);
 
                 let res_addrs = cpu.compute_modify_address_multiple(&amm);

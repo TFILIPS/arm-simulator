@@ -16,7 +16,7 @@ fn main() {
     let elf_file: ELFFile = ELFFile::load(&path).unwarp_or_exit();
     elf_file.check_header_values().unwarp_or_exit();
     
-    let mut cpu: ARMv5CPU = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+    let mut cpu: ARMv5CPU = ARMv5CPU::new(ConsoleOutput::new(), ConsoleExit);
     cpu.set_register(RegNames::PC, elf_file.get_entry_point() as i32);
     cpu.set_register(RegNames::SP, DEFAULT_STACK_POINTER as i32);
     cpu.set_encoding(elf_file.get_encoding());
