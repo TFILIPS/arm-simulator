@@ -110,13 +110,6 @@ pub trait OutputDevice {
     fn flush(&mut self);
 }
 
-// ToDo: Add write buffer here like so:
-// self.write_buffer.extend(&self.memory[a..a+l]);
-// if let Ok(s) = &String::from_utf8(WRITE_BUFFER.clone()) {
-//     self.output_device.output(s);
-//     WRITE_BUFFER.clear();
-// }
-// Also implement a flush so everything is printed before exiting
 pub struct ConsoleOutput {
     output_buffer: Vec<u8>,
     error_buffer: Vec<u8>

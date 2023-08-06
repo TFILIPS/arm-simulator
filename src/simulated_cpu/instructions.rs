@@ -997,7 +997,10 @@ impl ARMv5CPU {
                     self.get_register_intern(RegNames::R1) as u32 as usize;
                 self.output_device.output(&self.memory[a..a+l]);
             },
-            (x, 1) => self.exit_behaviour.exit(x),
+            (x, 1) => {
+                self.output_device.flush();
+                self.exit_behaviour.exit(x);
+            },
             (_, _) => ()
         }
         Ok(())
