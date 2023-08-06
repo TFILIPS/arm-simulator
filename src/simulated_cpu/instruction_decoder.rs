@@ -292,8 +292,8 @@ impl ARMv5Decoder {
             let mut imm: i32 = inst_bits.cut_bits(0..24) as i32;
             imm = (imm << 8) >> 8; //sign extend
             let op: ARMv5BranchOperation = match inst_bits.get_bit(24) {
-                true => ARMv5BranchOperation::BL,
-                false => ARMv5BranchOperation::B
+                T => ARMv5BranchOperation::BL,
+                F => ARMv5BranchOperation::B
             };
             ARMv5InstructionType::Branch { op, 
                 bo: BranchOperator::Offset(imm, false)

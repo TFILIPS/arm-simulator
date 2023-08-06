@@ -779,8 +779,6 @@ impl ARMv5CPU {
         Ok(())
     }
 
-
-
     fn bx(&mut self, l: bool, bo: &BranchOperator) -> Result<(), SimulationException> {
         let prog_addr: i32 = self.get_register_intern(RegNames::PC);
         // This behaviour is incorrect! After switching to 
@@ -802,8 +800,9 @@ impl ARMv5CPU {
                 self.set_register(RegNames::PC, new_prog_addr);
             },
             BranchOperator::Register(rm) => {
-                let target: i32 = self.get_register_intern(*rm);
-                self.set_register(RegNames::PC, target);
+                let mut target: u32 = self.get_register_intern(*rm) as u32;
+                target &= 0xFFFFFFFE;
+                self.set_register(RegNames::PC, target as i32);
             }
         };
 
@@ -1098,6 +1097,7 @@ impl ARMv5CPU {
 
 #[cfg(test)]
 mod tests {
+    use crate::simulated_cpu::operands::BranchOperator;
     use crate::utils::{T, F, ConsoleOutput, ConsoleExit, Endian};
     use crate::simulated_cpu::{
         SimulatedCPU, ARMv5CPU, RegNames, FlagNames, 
@@ -1491,8 +1491,63 @@ mod tests {
     }
 
 
-    //todo branch instructions but first implement unconditional instructions (bx)
+    macro_rules! branch_tests {
+        (function: $function:ident, $($test_name:ident: $test_values:expr),*) 
+        => {$(
+            #[test]
+            fn $test_name() {
+                #[allow(overflowing_literals)]
+                let (bo, pc, reg_val, l, exp_pc, exp_lr) = $test_values;
 
+                let mut cpu = ARMv5CPU::new(ConsoleOutput, ConsoleExit);
+                cpu.set_register(RegNames::PC, pc);
+                if let BranchOperator::Register(rm) = bo {
+                    cpu.set_register(rm, reg_val);
+                }
+
+                cpu.$function(l, &bo).unwrap();
+
+                assert_eq!(exp_pc, cpu.get_register(RegNames::PC));
+                assert_eq!(exp_lr, cpu.get_register(RegNames::LR));
+            }
+        )*}
+    }
+
+    branch_tests! {
+        function: b,
+        b_test_1: (
+            BranchOperator::Offset(0x06_FFF4, F), 
+            0x0032_0998, 0x000E_E5C7, F, 0x004E_0970, 0x0000_0000 
+        ),
+        b_test_2: (
+            BranchOperator::Offset(0x02_1DB7, T), 
+            0xFFFF_FF00, 0x002B_3DAD, F, 0x008_75E4, 0x0000_0000 
+        ),
+        b_test_3: (
+            BranchOperator::Offset(0xFF9D_DAD3, F), 
+            0x616F_7A3C, 0x0001_CDDB, T, 0x5FE6_E590, 0x616F_7A40
+        )
+    }
+
+    branch_tests! {
+        function: bx,
+        bx_test_1: (
+            BranchOperator::Offset(0x7B_CF1C, T), 
+            0x0029_7428, 0x000E_E5C7, T, 0x218_B0A2, 0x0029_742C
+        ),
+        bx_test_2: (
+            BranchOperator::Offset(0xFF8F_08FD, F), 
+            0x0000_D44A, 0xFFF2_1DB7, T, 0xFE3C_F846, 0x0000_D44E
+        ),
+        bx_test_3: (
+            BranchOperator::Register(RegNames::R11), 
+            0x00D0_2D1D, 0x11A9_109D, T, 0x11A9_109C, 0x00D0_2D21
+        ),
+        bx_test_4: (
+            BranchOperator::Register(RegNames::PC),
+            0x0F85_DFB5, 0x0F85_DFB5, F, 0x0F85_DFBC, 0x0000_0000
+        )
+    }
 
     macro_rules! load_tests {
         (function: $function:ident, $($test_name:ident: $test_values:expr),*) 

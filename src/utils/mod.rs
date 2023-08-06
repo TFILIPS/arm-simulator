@@ -109,6 +109,13 @@ pub trait OutputDevice {
     fn output_err(&self, err: &str);
 }
 
+// ToDo: Add write buffer here like so:
+// self.write_buffer.extend(&self.memory[a..a+l]);
+// if let Ok(s) = &String::from_utf8(WRITE_BUFFER.clone()) {
+//     self.output_device.output(s);
+//     WRITE_BUFFER.clear();
+// }
+// Also implement a flush so everything is printed before exiting
 pub struct ConsoleOutput;
 impl OutputDevice for ConsoleOutput {
     fn output(&self, msg: &str) {
