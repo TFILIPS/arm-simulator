@@ -1,7 +1,9 @@
 use wasm_bindgen::prelude::*;
 
 use elf_loader::ELFFile;
-use simulated_cpu::{SimulatedCPU, ARMv5CPU, names::RegNames, SimulationException};
+use simulated_cpu::{SimulatedCPU, ARMv5CPU, names::RegNames};
+#[cfg(not(target_family = "wasm"))]
+use simulated_cpu::SimulationException;
 
 use utils::{OutputDevice, ExitBehaviour};
 
@@ -56,20 +58,20 @@ impl ARMSimulator {
 
         let elf_file: ELFFile = ARMSimulator::get_loaded_elf_file(elf_bytes)?;
 
-        let simulated_cpu: Box<dyn SimulatedCPU<i32>> = 
-            ARMSimulator::get_new_cpu(&elf_file, DEFAULT_SP, &js_functions)?;
+        let simulated_cpu: ARMv5CPU = 
+            ARMSimulator::get_new_cpu(&elf_file, DEFAULT_STACK_POINTER, &js_functions)?;
 
         Ok(ARMSimulator { elf_file, simulated_cpu, js_functions })
     }
 
     pub fn reload_simulator(&mut self) -> Result<(), String> {
         self.simulated_cpu = ARMSimulator::get_new_cpu(
-            &self.elf_file, DEFAULT_SP, &self.js_functions)?;
+            &self.elf_file, DEFAULT_STACK_POINTER, &self.js_functions)?;
         Ok(())
     }
 
     pub fn step(&mut self) {
-        self.simulated_cpu.step();
+        self.simulated_cpu.step().unwrap();
         self.js_functions.update.call0(&JsValue::NULL)
             .expect("Error while trying to execute js function update!");
 
@@ -77,9 +79,9 @@ impl ARMSimulator {
 
     fn get_new_cpu(
         elf_file: &ELFFile, stack_pointer: u32, js_functions: &NeededJSFunctions
-    ) -> Result<Box<dyn SimulatedCPU<i32>>, String> {
+    ) -> Result<ARMv5CPU, String> {
 
-        let mut cpu: Box<dyn SimulatedCPU<i32>> = Box::new(ARMv5CPU::new(
+        let mut cpu: ARMv5CPU = ARMv5CPU::new(
             WebOutput { 
                 print: js_functions.print.clone(), 
                 print_err: js_functions.print_err.clone()
@@ -88,12 +90,12 @@ impl ARMSimulator {
                 print: js_functions.print.clone(), 
                 stop: js_functions.stop.clone()
             }
-        ));
+        );
 
         cpu.set_register(RegNames::PC, elf_file.get_entry_point() as i32);
         cpu.set_register(RegNames::SP, stack_pointer as i32);
         cpu.set_encoding(elf_file.get_encoding());
-        elf_file.load_memory(cpu.get_memory())?;
+        elf_file.load_into_memory(&mut cpu)?;
         Ok(cpu)
     }
 
