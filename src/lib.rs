@@ -3,51 +3,38 @@ use wasm_bindgen::prelude::*;
 use elf_loader::ELFFile;
 use simulated_cpu::{SimulatedCPU, ARMv5CPU, names::RegNames, SimulationException};
 
-#[cfg(not(target_family = "wasm"))]
-use utils::{ConsoleOutput, ConsoleExit, OutputDevice, ExitBehaviour};
-#[cfg(target_family = "wasm")]
 use utils::{OutputDevice, ExitBehaviour};
 
 mod elf_loader;
 mod simulated_cpu;
-mod utils;
+pub mod utils;
 
-const DEFAULT_SP: u32 = 0x40000;
+const DEFAULT_STACK_POINTER: u32 = 0x40000;
 
 #[wasm_bindgen]
 pub struct ARMSimulator {
     elf_file: ELFFile,
-    simulated_cpu: Box<dyn SimulatedCPU<i32>>,
+    simulated_cpu: ARMv5CPU,
     #[cfg(target_family = "wasm")]
     js_functions: NeededJSFunctions
 }
 
 #[cfg(not(target_family = "wasm"))]
 impl ARMSimulator { 
-    pub fn from_bytes(elf_bytes: &[u8]) -> Result<ARMSimulator, String> {
+    pub fn from_elf_file<O: OutputDevice + 'static, E: ExitBehaviour+ 'static> (
+        path: &str, output_device: O, exit_behaviour: E
+    ) -> Result<ARMSimulator, String> {
 
-        let elf_file: ELFFile = ARMSimulator::get_loaded_elf_file(elf_bytes)?;
+        let elf: ELFFile = ELFFile::load(path)?;
+        elf.check_header_values()?;
 
-        let simulated_cpu: Box<dyn SimulatedCPU<i32>> = 
-            ARMSimulator::get_new_cpu(&elf_file, DEFAULT_SP)?;
+        let mut cpu: ARMv5CPU = ARMv5CPU::new(output_device, exit_behaviour);
+        cpu.set_register(RegNames::PC, elf.get_entry_point() as i32);
+        cpu.set_register(RegNames::SP, DEFAULT_STACK_POINTER as i32);
+        cpu.set_encoding(elf.get_encoding());
+        elf.load_into_memory(&mut cpu)?;
 
-        Ok(ARMSimulator { elf_file, simulated_cpu })
-    }
-
-    pub fn from_file(path: &str) -> Result<ARMSimulator, String> {
-        let elf_file: ELFFile = ELFFile::load(path)?;
-        elf_file.check_header_values()?;
-
-        let simulated_cpu: Box<dyn SimulatedCPU<i32>> = 
-            ARMSimulator::get_new_cpu(&elf_file, DEFAULT_SP)?;
-
-        Ok(ARMSimulator { elf_file, simulated_cpu })
-    }
-
-    pub fn reload_simulator(&mut self) -> Result<(), String> {
-        self.simulated_cpu = 
-            ARMSimulator::get_new_cpu(&self.elf_file, DEFAULT_SP)?;
-        Ok(())
+        Ok(ARMSimulator { elf_file: elf, simulated_cpu: cpu })
     }
 
     pub fn step(&mut self) -> Result<(), SimulationException> {
@@ -56,21 +43,6 @@ impl ARMSimulator {
 
     pub fn get_flags(&self) -> Vec<bool> {
         Vec::from(self.simulated_cpu.get_flags())
-    }
-
-
-    fn get_new_cpu(
-        elf_file: &ELFFile, stack_pointer: u32
-    ) -> Result<Box<dyn SimulatedCPU<i32>>, String> {
-
-        let mut cpu: ARMv5CPU = 
-            ARMv5CPU::new(ConsoleOutput::new(), ConsoleExit);
-
-        cpu.set_register(RegNames::PC, elf_file.get_entry_point() as i32);
-        cpu.set_register(RegNames::SP, stack_pointer as i32);
-        cpu.set_encoding(elf_file.get_encoding());
-        elf_file.load_into_memory(&mut cpu)?;
-        Ok(Box::new(cpu))
     }
 }
 

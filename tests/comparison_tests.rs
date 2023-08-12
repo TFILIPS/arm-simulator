@@ -1,7 +1,7 @@
-use std::{fs::File, io::BufReader};
+use std::{fs::{File, read_to_string}, io::BufReader};
 
 //use std::{fs::{read_dir, File}, io::BufReader};
-use arm_simulator::ARMSimulator;
+use arm_simulator::{ARMSimulator, utils::{ConsoleOutput, ConsoleExit, OutputDevice}};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
@@ -30,7 +30,9 @@ macro_rules! behaviour_tests {
             // The struct is only needed for parsing the JSON
             let expected_behaviour = expected_behaviour.0;
 
-            let mut sim = ARMSimulator::from_file($executable).unwrap();
+            let mut sim = ARMSimulator::from_elf_file(
+                $executable, ConsoleOutput::new(), ConsoleExit
+            ).unwrap();
             // Syncronize the stack pointer of simulator and behaviour
             sim.set_register(13, expected_behaviour[0].registers[13]);
             
@@ -82,5 +84,84 @@ behaviour_tests! {
     fold_test (
         executable: "./sample_programs/fold",
         behaviour: "./tests/behaviours/fold-expected-behaviour.json"
+    )
+}
+
+struct OutputComperator {
+    expected_output: String,
+    output_buffer: Vec<u8>
+}
+impl OutputDevice for OutputComperator {
+    fn output(&mut self, bytes: &[u8]) {
+        self.output_buffer.extend(bytes);
+    }
+
+    fn output_err(&mut self, bytes: &[u8]) {
+        self.output_buffer.extend(bytes);
+    }
+
+    fn flush(&mut self) {
+        assert_eq!(
+            self.expected_output, 
+            String::from_utf8_lossy(&self.output_buffer)
+        );
+    }
+}
+impl OutputComperator {
+    fn new(expected_output: String) -> OutputComperator {
+        OutputComperator {
+            expected_output,
+            output_buffer: Vec::new()
+        }
+    }
+}
+
+macro_rules! output_tests {
+    ($($test_name:ident (
+        executable: $executable:expr, output: $output:expr
+    )),*)  => ($(
+        #[test]
+        fn $test_name() {
+            let mut expected_output = read_to_string($output)
+                .expect("Could not read output file!");
+            expected_output = expected_output.replace("\r\n", "\n");
+
+            let mut sim = ARMSimulator::from_elf_file(
+                $executable, 
+                OutputComperator::new(expected_output), 
+                ConsoleExit
+            ).unwrap();
+
+            loop {
+                sim.step().unwrap();
+            }
+        }
+    )*)
+}
+
+output_tests! {
+    hallo_output_test (
+        executable: "./sample_programs/hallo",
+        output: "./tests/outputs/hallo-expected-output.txt"
+    ),
+    // Detected misstake: C flag behaves differently in subtractions
+    fib_output_test (
+        executable: "./sample_programs/fib",
+        output: "./tests/outputs/fib-expected-output.txt"
+    ),
+
+    scalar_output_test (
+        executable: "./sample_programs/scalar",
+        output: "./tests/outputs/scalar-expected-output.txt"
+    ),
+    
+    functions_output_test (
+        executable: "./sample_programs/functions",
+        output: "./tests/outputs/functions-expected-output.txt"
+    ),
+
+    fold_output_test (
+        executable: "./sample_programs/fold",
+        output: "./tests/outputs/fold-expected-output.txt"
     )
 }
