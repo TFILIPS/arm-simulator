@@ -1,4 +1,4 @@
-use std::{ops::Range, iter::StepBy, fmt::Display, mem::transmute};
+use std::{fmt::Display, mem::transmute};
 
 use super::{
     SimulatedCPU, ARMv5CPU, names::{RegNames, FlagNames}, SimulationException,
@@ -910,14 +910,14 @@ impl ARMv5CPU {
 
     //do not change any register if data abourt (better then specification)
     fn ldm(&mut self, amm: AddressingModeMultiple) -> Result<(), SimulationException> {
-        let mut addresses: StepBy<Range<u32>> = 
+        let mut addresses: Vec<u32> = 
             self.compute_modify_address_multiple(&amm);
 
         let mut values: [u32; 16] = [0; 16];
 
         for i in 0..16 {
             if amm.register_list.get_bit(i) {
-                let address: u32 = addresses.next().unwrap() & 0xFFFFFFFC;
+                let address: u32 = addresses.remove(0) & 0xFFFFFFFC;
                 let bytes: &[u8] = self.get_memory(address, 4)?; //&self.memory[address..address+4];
                 values[i] = slice_to_u32(bytes, &self.encoding);
             }
@@ -937,12 +937,12 @@ impl ARMv5CPU {
 
 
     fn stm(&mut self, amm: AddressingModeMultiple) -> Result<(), SimulationException> {
-        let mut addresses: StepBy<Range<u32>> = 
+        let mut addresses: Vec<u32> = 
             self.compute_modify_address_multiple(&amm);
             
         for i in 0..16 {
             if amm.register_list.get_bit(i) {
-                let address: u32 = addresses.next().unwrap() & 0xFFFFFFFC;
+                let address: u32 = addresses.remove(0) & 0xFFFFFFFC;
                 
                 let reg_name: RegNames = (i as u32).into();
                 let value: i32 = self.get_register_intern(reg_name);

@@ -1,4 +1,4 @@
-use std::{ops::Range, iter::StepBy, fmt::Display};
+use std::fmt::Display;
 
 use crate::utils::BitAccess;
 
@@ -165,31 +165,32 @@ impl ARMv5CPU {
         address
     }
 
+
+    //Todo: fix issue when wrapping around
     pub fn compute_modify_address_multiple(
         &mut self, amm: &AddressingModeMultiple
-    ) -> StepBy<Range<u32>> {
+    ) -> Vec<u32> {
         let base_address: u32 = self.get_register_intern(amm.rn) as u32;
         
         let op = if amm.u {u32::wrapping_add} else {u32::wrapping_sub};
         let num_regs: u32 = amm.register_list.count_ones();
+
         let new_address: u32 = op(base_address, num_regs * 4);
         if amm.w {
             self.set_register(amm.rn, new_address as i32);
         }
 
-        let mut range: Range<u32> = if amm.u {
-            base_address..new_address
-        } 
-        else {
-            new_address+4..base_address+4
-        };
+        let mut start: u32 = if amm.u { base_address } 
+        else {  new_address.wrapping_add(4) };
 
-        if amm.p {
-            range.start = op(range.start, 4);
-            range.end = op(range.end, 4);
+        if amm.p { start = op(start, 4); }
+
+        let mut addresses: Vec<u32> = Vec::new();
+        for i in 0..num_regs {
+            addresses.push(start.wrapping_add(i * 4));
         }
 
-        range.step_by(4)
+        addresses
     }
 }
 
@@ -354,9 +355,7 @@ mod tests {
 
                 let res_addrs = cpu.compute_modify_address_multiple(&amm);
 
-                for (i, res_addr) in res_addrs.enumerate() {
-                    assert_eq!(addrs_out[i], res_addr, "res_addr_id: {i}");
-                }
+                assert_eq!(Vec::from(addrs_out), res_addrs);
                 assert_eq!(addr_mem, cpu.get_register(amm.rn) as u32);
 
             }
