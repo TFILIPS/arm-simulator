@@ -34,7 +34,7 @@ fn main() {
             //Here we can use unwrap, because if the last executed step wasn't
             //successful, the selected ExitBehaviour will terminate the
             //simulation before the unwraping happens.
-            cpu.step().unwrap() 
+            cpu.step().unwrap();
         } 
     }
 }

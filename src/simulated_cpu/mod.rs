@@ -17,7 +17,7 @@ mod instruction_decoder;
 
 //Here R is the type of the registers, which should be i8, i16, i32 or i64.
 pub trait SimulatedCPU<R> {
-    fn step(&mut self) -> Result<(), SimulationException>;
+    fn step(&mut self) -> Result<SimulationEvent, SimulationException>;
     fn disassemble_memory(
         &self, start: u32, end: u32, labels: Vec<(u32, String)>
     ) -> String;
@@ -40,9 +40,9 @@ pub struct ARMv5CPU {
     exit_behaviour: Box<dyn ExitBehaviour>
 }
 impl SimulatedCPU<i32> for ARMv5CPU {
-    fn step(&mut self) -> Result<(), SimulationException> {
+    fn step(&mut self) -> Result<SimulationEvent, SimulationException> {
         let address: u32 = self.registers[RegNames::PC] as u32;
-        let result: Result<(), SimulationException> = 
+        let result: Result<SimulationEvent, SimulationException> = 
             self.load_and_exectue_instruction(address);
 
         if let Err(err) = &result {
@@ -150,6 +150,14 @@ impl ARMv5CPU {
         }
     }
 
+    #[allow(dead_code)] //This is not actually dead code, but the compiler thinks so
+    pub fn reset(&mut self) {
+        self.registers = [0i32; 16];
+        self.flags = [false; 4];
+        self.memory = vec![0u8; ARMv5CPU::MEMORY_SIZE];
+        self.encoding = Endian::Little;
+    }
+
     fn get_register_intern(&self, register: RegNames) -> i32 {
         if let RegNames::PC = register { 
             self.registers[RegNames::PC].wrapping_add(8) 
@@ -178,7 +186,7 @@ impl ARMv5CPU {
 
     fn load_and_exectue_instruction(
         &mut self, address: u32
-    ) -> Result<(), SimulationException>{
+    ) -> Result<SimulationEvent, SimulationException>{
         match self.get_memory(address, 4) {
             Ok(bytes) => {
                 let bits: u32 = slice_to_u32(&bytes, &self.encoding);
@@ -208,6 +216,12 @@ impl ARMv5CPU {
             }
         }
     }
+}
+
+pub enum SimulationEvent {
+    None,
+    Exit(i32),
+    Breakpoint
 }
 
 #[derive(Debug)]

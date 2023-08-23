@@ -1,9 +1,12 @@
-use std::{fs::{File, read_to_string}, io::BufReader};
+extern crate arm_simulator;
 
-//use std::{fs::{read_dir, File}, io::BufReader};
-use arm_simulator::{ARMSimulator, utils::{ConsoleOutput, ConsoleExit, OutputDevice}};
+use std::{fs::{File, read_to_string}, io::BufReader};
 use serde::{Deserialize, Serialize};
 use serde_json;
+
+use arm_simulator::{ARMSimulator, utils::{
+    ConsoleOutput, ConsoleExit, OutputDevice
+}};
 
 #[derive(Serialize, Deserialize, Debug)]
 struct State {

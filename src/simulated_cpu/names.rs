@@ -1,6 +1,7 @@
 use std::{ops::{Index, IndexMut}, mem::transmute, fmt::Display};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u32)]
 pub enum FlagNames { 
     N, Z, C, V 
 }
@@ -14,6 +15,15 @@ impl<T> Index<FlagNames> for [T] {
 impl<T> IndexMut<FlagNames> for [T] {
     fn index_mut(&mut self, index: FlagNames) -> &mut Self::Output {
         return &mut self[index as usize];
+    }
+}
+impl From<u32> for FlagNames{
+    fn from(value: u32) -> Self {
+        const NUM_FLAGS: u32 = 16;
+        if value >= NUM_FLAGS {
+            panic!("Convertion to FlagNames failed! value >= {NUM_FLAGS}");
+        }
+        unsafe { transmute(value) }
     }
 }
 
