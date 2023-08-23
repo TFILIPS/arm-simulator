@@ -165,7 +165,6 @@ impl ARMv5CPU {
         address
     }
 
-
     pub fn compute_modify_address_multiple(
         &mut self, amm: &AddressingModeMultiple
     ) -> Vec<u32> {
