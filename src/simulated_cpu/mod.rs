@@ -217,7 +217,7 @@ impl ARMv5CPU {
                     Err(SimulationException {
                         kind: err.kind,
                         msg: format!(
-                            "Exception caused by instruction at 0x{:X}: {}\n",
+                            "Exception caused by instruction at 0x{:X}: {}",
                             address, err.msg
                         )
                     })

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use elf_loader::ELFFile;
-use simulated_cpu::{names::ARMv5RegNames, ARMv5CPU, SimulatedCPU};
-pub use simulated_cpu::{SimulationEvent, SimulationException};
+use simulated_cpu::{ARMv5CPU, SimulatedCPU};
+pub use simulated_cpu::{SimulationEvent, SimulationException, names::ARMv5RegNames};
 use utils::Memory;
 
 mod elf_loader;
