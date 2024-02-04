@@ -145,15 +145,6 @@ impl ConsoleOutput {
     }
 }
 
-pub trait ExitBehaviour {
-    fn exit(&self, code: i32);
-}
-pub struct ConsoleExit;
-impl ExitBehaviour for ConsoleExit {
-    fn exit(&self, code: i32) {
-        exit(code);
-    }
-}
 
 // ToDo: implement Error [https://stackoverflow.com/questions/42584368/how-do-you-define-custom-error-types-in-rust]
 #[derive(Debug)]

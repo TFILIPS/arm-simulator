@@ -1,21 +1,21 @@
 use crate::utils::{BitAccess, T, F};
 use super::{
-    SimulatedCPU, ARMv5CPU, names::RegNames, instructions::*,
+    SimulatedCPU, ARMv5CPU, names::ARMv5RegNames, instructions::*,
     operands::{
         ShifterOperand, AddressingMode, OffsetType,
         AddressingModeMultiple, BranchOperator
     }
 };
 
-pub trait InstructionDecoder<I: Instruction<C, S>, C: SimulatedCPU<S>, S> {
+pub trait InstructionDecoder<I: Instruction<C>, C: SimulatedCPU> {
     fn decode(instruction_bits: u32) -> I;
 }
 
 // ToDo: Refactor condition
-// ToDo: Try to use memorization
+// ToDo: Try to use memorization (not working)
 //https://developer.arm.com/documentation/ddi0406/c/Application-Level-Architecture/ARM-Instruction-Set-Encoding/ARM-instruction-set-encoding?lang=en
 pub struct ARMv5Decoder;
-impl InstructionDecoder<ARMv5Instruction, ARMv5CPU, i32> for ARMv5Decoder {
+impl InstructionDecoder<ARMv5Instruction, ARMv5CPU> for ARMv5Decoder {
     fn decode(instruction_bits: u32) -> ARMv5Instruction {
         let category = if instruction_bits.cut_bits(28..=31) != 0b1111 {
             match instruction_bits.cut_bits(26..=27) {
@@ -101,8 +101,8 @@ impl ARMv5Decoder {
 
     fn data(inst_bits: u32, so: ShifterOperand) -> ARMv5Instruction {
         let opcode: u32 = inst_bits.cut_bits(21..=24);
-        let rn: RegNames = inst_bits.cut_bits(16..=19).into();
-        let rd: RegNames = inst_bits.cut_bits(12..=15).into();
+        let rn: ARMv5RegNames = inst_bits.cut_bits(16..=19).into();
+        let rd: ARMv5RegNames = inst_bits.cut_bits(12..=15).into();
         let s: bool = inst_bits.get_bit(20);
 
         ARMv5Instruction { 
@@ -118,8 +118,8 @@ impl ARMv5Decoder {
         let op: u32 = inst_bits.cut_bits(21..=22);
         let op2: u32 = inst_bits.cut_bits(4..=6);
         
-        let rm: RegNames = inst_bits.cut_bits(0..=3).into();
-        let rd: RegNames = inst_bits.cut_bits(12..=15).into();
+        let rm: ARMv5RegNames = inst_bits.cut_bits(0..=3).into();
+        let rd: ARMv5RegNames = inst_bits.cut_bits(12..=15).into();
         
         let instruction_type: ARMv5InstructionType = match (op2, op) {
             (0b000, 0b00 | 0b10) => ARMv5InstructionType::Generic { 
@@ -162,10 +162,10 @@ impl ARMv5Decoder {
         let condition: Condition = Condition::from_instruction(inst_bits);
 
         let s: bool = inst_bits.get_bit(20);
-        let rd_hi: RegNames = inst_bits.cut_bits(16..=19).into();
-        let rn_lo: RegNames = inst_bits.cut_bits(12..=15).into();
-        let rs: RegNames = inst_bits.cut_bits(8..=11).into();
-        let rm: RegNames = inst_bits.cut_bits(0..=3).into();
+        let rd_hi: ARMv5RegNames = inst_bits.cut_bits(16..=19).into();
+        let rn_lo: ARMv5RegNames = inst_bits.cut_bits(12..=15).into();
+        let rs: ARMv5RegNames = inst_bits.cut_bits(8..=11).into();
+        let rm: ARMv5RegNames = inst_bits.cut_bits(0..=3).into();
 
         ARMv5Instruction { 
             condition, instruction_type: ARMv5InstructionType::Multiply { 
@@ -187,9 +187,9 @@ impl ARMv5Decoder {
         };
 
         let condition: Condition = Condition::from_instruction(inst_bits);
-        let rn: RegNames = inst_bits.cut_bits(16..=19).into();
-        let rd: RegNames = inst_bits.cut_bits(12..=15).into();
-        let rm: RegNames = inst_bits.cut_bits(0..=3).into();
+        let rn: ARMv5RegNames = inst_bits.cut_bits(16..=19).into();
+        let rd: ARMv5RegNames = inst_bits.cut_bits(12..=15).into();
+        let rm: ARMv5RegNames = inst_bits.cut_bits(0..=3).into();
 
         ARMv5Instruction { 
             condition, instruction_type: ARMv5InstructionType::Synchronization {
@@ -231,8 +231,8 @@ impl ARMv5Decoder {
         let u: bool = inst_bits.get_bit(23);
         let w: bool = inst_bits.get_bit(21);
 
-        let rn: RegNames = inst_bits.cut_bits(16..=19).into();
-        let rd: RegNames = inst_bits.cut_bits(12..=15).into();
+        let rn: ARMv5RegNames = inst_bits.cut_bits(16..=19).into();
+        let rd: ARMv5RegNames = inst_bits.cut_bits(12..=15).into();
 
         ARMv5Instruction {
             condition, instruction_type: ARMv5InstructionType::LoadStore { 
@@ -276,8 +276,8 @@ impl ARMv5Decoder {
         };
 
         let condition: Condition = Condition::from_instruction(inst_bits);
-        let rn: RegNames = inst_bits.cut_bits(16..=19).into();
-        let rd: RegNames = inst_bits.cut_bits(12..=15).into();
+        let rn: ARMv5RegNames = inst_bits.cut_bits(16..=19).into();
+        let rd: ARMv5RegNames = inst_bits.cut_bits(12..=15).into();
 
         ARMv5Instruction {
             condition, instruction_type: ARMv5InstructionType::LoadStore { 
@@ -398,7 +398,7 @@ fn bm(value: u32, mask: u32, expectation: u32) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::simulated_cpu::{instructions::*, names::RegNames, operands::{
+    use crate::simulated_cpu::{instructions::*, names::ARMv5RegNames, operands::{
             ShifterOperand, barrel_shifter::ShiftType, 
             AddressingMode, OffsetType, AddressingModeMultiple, BranchOperator
         }
@@ -427,10 +427,10 @@ mod tests {
                 instruction_type: ARMv5InstructionType::DataProcessing {
                     op: ARMv5DataProcessingOperation::AND,
                     s: false,
-                    rd: RegNames::R4,
-                    rn: RegNames::R3,
+                    rd: ARMv5RegNames::R4,
+                    rn: ARMv5RegNames::R3,
                     so: ShifterOperand::ImmediateShift {
-                        rm: RegNames::R9,
+                        rm: ARMv5RegNames::R9,
                         shift: ShiftType::LSR,
                         shift_amount: 5
                     }
@@ -444,12 +444,12 @@ mod tests {
                 instruction_type: ARMv5InstructionType::DataProcessing {
                     op: ARMv5DataProcessingOperation::EOR,
                     s: false,
-                    rd: RegNames::R0,
-                    rn: RegNames::R10,
+                    rd: ARMv5RegNames::R0,
+                    rn: ARMv5RegNames::R10,
                     so: ShifterOperand::RegisterShift {
-                        rm: RegNames::R7,
+                        rm: ARMv5RegNames::R7,
                         shift: ShiftType::ASR,
-                        rs: RegNames::R5
+                        rs: ARMv5RegNames::R5
                     }
                 }
             }
@@ -461,10 +461,10 @@ mod tests {
                 instruction_type: ARMv5InstructionType::DataProcessing {
                     op: ARMv5DataProcessingOperation::SUB,
                     s: true,
-                    rd: RegNames::PC,
-                    rn: RegNames::R8,
+                    rd: ARMv5RegNames::PC,
+                    rn: ARMv5RegNames::R8,
                     so: ShifterOperand::ImmediateShift {
-                        rm: RegNames::R3,
+                        rm: ARMv5RegNames::R3,
                         shift: ShiftType::LSL,
                         shift_amount: 0
                     }
@@ -478,10 +478,10 @@ mod tests {
                 instruction_type: ARMv5InstructionType::DataProcessing {
                     op: ARMv5DataProcessingOperation::RSB,
                     s: false,
-                    rd: RegNames::R7,
-                    rn: RegNames::R9,
+                    rd: ARMv5RegNames::R7,
+                    rn: ARMv5RegNames::R9,
                     so: ShifterOperand::ImmediateShift {
-                        rm: RegNames::R4,
+                        rm: ARMv5RegNames::R4,
                         shift: ShiftType::LSL,
                         shift_amount: 0
                     }
@@ -495,10 +495,10 @@ mod tests {
                 instruction_type: ARMv5InstructionType::DataProcessing {
                     op: ARMv5DataProcessingOperation::ADD,
                     s: false,
-                    rd: RegNames::R10,
-                    rn: RegNames::SP,
+                    rd: ARMv5RegNames::R10,
+                    rn: ARMv5RegNames::SP,
                     so: ShifterOperand::ImmediateShift {
-                        rm: RegNames::R5,
+                        rm: ARMv5RegNames::R5,
                         shift: ShiftType::ROR,
                         shift_amount: 8
                     }
@@ -512,10 +512,10 @@ mod tests {
                 instruction_type: ARMv5InstructionType::DataProcessing {
                     op: ARMv5DataProcessingOperation::ADC,
                     s: false,
-                    rd: RegNames::R2,
-                    rn: RegNames::R3,
+                    rd: ARMv5RegNames::R2,
+                    rn: ARMv5RegNames::R3,
                     so: ShifterOperand::ImmediateShift {
-                        rm: RegNames::PC,
+                        rm: ARMv5RegNames::PC,
                         shift: ShiftType::LSL,
                         shift_amount: 31
                     }
@@ -529,8 +529,8 @@ mod tests {
                 instruction_type: ARMv5InstructionType::DataProcessing {
                     op: ARMv5DataProcessingOperation::SBC,
                     s: true,
-                    rd: RegNames::R6,
-                    rn: RegNames::R2,
+                    rd: ARMv5RegNames::R6,
+                    rn: ARMv5RegNames::R2,
                     so: ShifterOperand::Immediate { 
                         immediate: 186, rotate: 0
                     }
@@ -544,10 +544,10 @@ mod tests {
                 instruction_type: ARMv5InstructionType::DataProcessing {
                     op: ARMv5DataProcessingOperation::RSC,
                     s: false,
-                    rd: RegNames::R9,
-                    rn: RegNames::R4,
+                    rd: ARMv5RegNames::R9,
+                    rn: ARMv5RegNames::R4,
                     so: ShifterOperand::ImmediateShift {
-                        rm: RegNames::R10,
+                        rm: ARMv5RegNames::R10,
                         shift: ShiftType::LSL,
                         shift_amount: 0
                     }
@@ -561,12 +561,12 @@ mod tests {
                 instruction_type: ARMv5InstructionType::DataProcessing {
                     op: ARMv5DataProcessingOperation::TST,
                     s: true,
-                    rd: RegNames::R0,
-                    rn: RegNames::R2,
+                    rd: ARMv5RegNames::R0,
+                    rn: ARMv5RegNames::R2,
                     so: ShifterOperand::RegisterShift {
-                        rm: RegNames::R6,
+                        rm: ARMv5RegNames::R6,
                         shift: ShiftType::LSL,
-                        rs: RegNames::R1
+                        rs: ARMv5RegNames::R1
                     }
                 }
             }
@@ -578,8 +578,8 @@ mod tests {
                 instruction_type: ARMv5InstructionType::DataProcessing {
                     op: ARMv5DataProcessingOperation::TEQ,
                     s: true,
-                    rd: RegNames::R0,
-                    rn: RegNames::R4,
+                    rd: ARMv5RegNames::R0,
+                    rn: ARMv5RegNames::R4,
                     so: ShifterOperand::Immediate { 
                         immediate: 21, rotate: 4
                     }
@@ -593,10 +593,10 @@ mod tests {
                 instruction_type: ARMv5InstructionType::DataProcessing {
                     op: ARMv5DataProcessingOperation::CMP,
                     s: true,
-                    rd: RegNames::R0,
-                    rn: RegNames::R12,
+                    rd: ARMv5RegNames::R0,
+                    rn: ARMv5RegNames::R12,
                     so: ShifterOperand::ImmediateShift {
-                        rm: RegNames::R12,
+                        rm: ARMv5RegNames::R12,
                         shift: ShiftType::LSL,
                         shift_amount: 0
                     }
@@ -610,12 +610,12 @@ mod tests {
                 instruction_type: ARMv5InstructionType::DataProcessing {
                     op: ARMv5DataProcessingOperation::CMN,
                     s: true,
-                    rd: RegNames::R0,
-                    rn: RegNames::R5,
+                    rd: ARMv5RegNames::R0,
+                    rn: ARMv5RegNames::R5,
                     so: ShifterOperand::RegisterShift {
-                        rm: RegNames::R7,
+                        rm: ARMv5RegNames::R7,
                         shift: ShiftType::ROR,
-                        rs: RegNames::R11
+                        rs: ARMv5RegNames::R11
                     }
                 }
             }
@@ -627,10 +627,10 @@ mod tests {
                 instruction_type: ARMv5InstructionType::DataProcessing {
                     op: ARMv5DataProcessingOperation::ORR,
                     s: true,
-                    rd: RegNames::R12,
-                    rn: RegNames::LR,
+                    rd: ARMv5RegNames::R12,
+                    rn: ARMv5RegNames::LR,
                     so: ShifterOperand::ImmediateShift {
-                        rm: RegNames::R2,
+                        rm: ARMv5RegNames::R2,
                         shift: ShiftType::LSL,
                         shift_amount: 0
                     }
@@ -644,10 +644,10 @@ mod tests {
                 instruction_type: ARMv5InstructionType::DataProcessing {
                     op: ARMv5DataProcessingOperation::MOV,
                     s: false,
-                    rd: RegNames::R11,
-                    rn: RegNames::R0,
+                    rd: ARMv5RegNames::R11,
+                    rn: ARMv5RegNames::R0,
                     so: ShifterOperand::ImmediateShift {
-                        rm: RegNames::R8,
+                        rm: ARMv5RegNames::R8,
                         shift: ShiftType::LSL,
                         shift_amount: 0
                     }
@@ -661,10 +661,10 @@ mod tests {
                 instruction_type: ARMv5InstructionType::DataProcessing {
                     op: ARMv5DataProcessingOperation::BIC,
                     s: true,
-                    rd: RegNames::LR,
-                    rn: RegNames::R12,
+                    rd: ARMv5RegNames::LR,
+                    rn: ARMv5RegNames::R12,
                     so: ShifterOperand::ImmediateShift {
-                        rm: RegNames::R5,
+                        rm: ARMv5RegNames::R5,
                         shift: ShiftType::ROR,
                         shift_amount: 0
                     }
@@ -678,8 +678,8 @@ mod tests {
                 instruction_type: ARMv5InstructionType::DataProcessing {
                     op: ARMv5DataProcessingOperation::MVN,
                     s: false,
-                    rd: RegNames::R11,
-                    rn: RegNames::R0,
+                    rd: ARMv5RegNames::R11,
+                    rn: ARMv5RegNames::R0,
                     so: ShifterOperand::Immediate { 
                         immediate: 87, rotate: 14
                     }
@@ -694,10 +694,10 @@ mod tests {
                 instruction_type: ARMv5InstructionType::Multiply { 
                     op: ARMv5MultiplyOperation::MUL,
                     s: false,
-                    rn_lo: RegNames::R0,
-                    rd_hi: RegNames::R0,
-                    rm: RegNames::R7,
-                    rs: RegNames::SP
+                    rn_lo: ARMv5RegNames::R0,
+                    rd_hi: ARMv5RegNames::R0,
+                    rm: ARMv5RegNames::R7,
+                    rs: ARMv5RegNames::SP
                 }
             }
         ),
@@ -708,10 +708,10 @@ mod tests {
                 instruction_type: ARMv5InstructionType::Multiply { 
                     op: ARMv5MultiplyOperation::MLA,
                     s: true,
-                    rn_lo: RegNames::R9,
-                    rd_hi: RegNames::R2,
-                    rm: RegNames::R1,
-                    rs: RegNames::R6
+                    rn_lo: ARMv5RegNames::R9,
+                    rd_hi: ARMv5RegNames::R2,
+                    rm: ARMv5RegNames::R1,
+                    rs: ARMv5RegNames::R6
                 }
             }
         ),
@@ -722,10 +722,10 @@ mod tests {
                 instruction_type: ARMv5InstructionType::Multiply { 
                     op: ARMv5MultiplyOperation::SMULL,
                     s: false,
-                    rn_lo: RegNames::SP,
-                    rd_hi: RegNames::R12,
-                    rm: RegNames::R2,
-                    rs: RegNames::R0
+                    rn_lo: ARMv5RegNames::SP,
+                    rd_hi: ARMv5RegNames::R12,
+                    rm: ARMv5RegNames::R2,
+                    rs: ARMv5RegNames::R0
                 }
             }
         ),
@@ -736,10 +736,10 @@ mod tests {
                 instruction_type: ARMv5InstructionType::Multiply { 
                     op: ARMv5MultiplyOperation::UMULL,
                     s: true,
-                    rn_lo: RegNames::R7,
-                    rd_hi: RegNames::R9,
-                    rm: RegNames::R0,
-                    rs: RegNames::R10
+                    rn_lo: ARMv5RegNames::R7,
+                    rd_hi: ARMv5RegNames::R9,
+                    rm: ARMv5RegNames::R0,
+                    rs: ARMv5RegNames::R10
                 }
             }
         ),
@@ -750,10 +750,10 @@ mod tests {
                 instruction_type: ARMv5InstructionType::Multiply { 
                     op: ARMv5MultiplyOperation::SMLAL,
                     s: false,
-                    rn_lo: RegNames::R4,
-                    rd_hi: RegNames::R10,
-                    rm: RegNames::R1,
-                    rs: RegNames::R12
+                    rn_lo: ARMv5RegNames::R4,
+                    rd_hi: ARMv5RegNames::R10,
+                    rm: ARMv5RegNames::R1,
+                    rs: ARMv5RegNames::R12
                 }
             }
         ),
@@ -764,10 +764,10 @@ mod tests {
                 instruction_type: ARMv5InstructionType::Multiply { 
                     op: ARMv5MultiplyOperation::UMLAL,
                     s: false,
-                    rn_lo: RegNames::LR,
-                    rd_hi: RegNames::R8,
-                    rm: RegNames::R11,
-                    rs: RegNames::R2
+                    rn_lo: ARMv5RegNames::LR,
+                    rd_hi: ARMv5RegNames::R8,
+                    rm: ARMv5RegNames::R11,
+                    rs: ARMv5RegNames::R2
                 }
             }
         ),
@@ -778,8 +778,8 @@ mod tests {
                 condition: Condition::VS,
                 instruction_type: ARMv5InstructionType::Miscellaneous {
                     op: ARMv5MiscellaneousOperation::CLZ,
-                    rd: RegNames::R12,
-                    rm: RegNames::R3
+                    rd: ARMv5RegNames::R12,
+                    rm: ARMv5RegNames::R3
                 }
             }
         ),
@@ -811,7 +811,7 @@ mod tests {
                 condition: Condition::HI,
                 instruction_type: ARMv5InstructionType::Branch { 
                     op: ARMv5BranchOperation::BX,
-                    bo: BranchOperator::Register(RegNames::R5)
+                    bo: BranchOperator::Register(ARMv5RegNames::R5)
                 }
             }
         ),
@@ -833,7 +833,7 @@ mod tests {
                 condition: Condition::NE,
                 instruction_type: ARMv5InstructionType::Branch { 
                     op: ARMv5BranchOperation::BLX,
-                    bo: BranchOperator::Register(RegNames::R9)
+                    bo: BranchOperator::Register(ARMv5RegNames::R9)
                 }
             }
         ),
@@ -844,10 +844,10 @@ mod tests {
                 condition: Condition::GE,
                 instruction_type: ARMv5InstructionType::LoadStore { 
                     op: ARMv5LoadStoreOperation::LDR, 
-                    rd: RegNames::R10, 
+                    rd: ARMv5RegNames::R10, 
                     am: AddressingMode { 
                         p: true, u: true, w: true,
-                        rn: RegNames::R3, 
+                        rn: ARMv5RegNames::R3, 
                         offset_type: OffsetType::Immediate { 
                             offset: 03583
                         }
@@ -861,12 +861,12 @@ mod tests {
                 condition: Condition::AL,
                 instruction_type: ARMv5InstructionType::LoadStore { 
                     op: ARMv5LoadStoreOperation::LDRB, 
-                    rd: RegNames::R5, 
+                    rd: ARMv5RegNames::R5, 
                     am: AddressingMode { 
                         p: false, u: true, w: false, 
-                        rn: RegNames::R7, 
+                        rn: ARMv5RegNames::R7, 
                         offset_type: OffsetType::ScaledRegister {
-                            rm: RegNames::R1,
+                            rm: ARMv5RegNames::R1,
                             shift: ShiftType::ROR,
                             shift_imm: 31 
                         }
@@ -880,12 +880,12 @@ mod tests {
                 condition: Condition::GE,
                 instruction_type: ARMv5InstructionType::LoadStore { 
                     op: ARMv5LoadStoreOperation::LDRBT, 
-                    rd: RegNames::LR, 
+                    rd: ARMv5RegNames::LR, 
                     am: AddressingMode { 
                         p: false, u: true, w: true, 
-                        rn: RegNames::R4, 
+                        rn: ARMv5RegNames::R4, 
                         offset_type: OffsetType::ScaledRegister {
-                            rm: RegNames::LR,
+                            rm: ARMv5RegNames::LR,
                             shift: ShiftType::LSL,
                             shift_imm: 0
                         }
@@ -900,10 +900,10 @@ mod tests {
                 condition: Condition::AL,
                 instruction_type: ARMv5InstructionType::LoadStore { 
                     op: ARMv5LoadStoreOperation::LDRH, 
-                    rd: RegNames::R12, 
+                    rd: ARMv5RegNames::R12, 
                     am: AddressingMode { 
                         p: true, u: true, w: false, 
-                        rn: RegNames::R5, 
+                        rn: ARMv5RegNames::R5, 
                         offset_type: OffsetType::Immediate { 
                             offset: 0 
                         }
@@ -918,10 +918,10 @@ mod tests {
                 condition: Condition::PL,
                 instruction_type: ARMv5InstructionType::LoadStore { 
                     op: ARMv5LoadStoreOperation::LDRSB, 
-                    rd: RegNames::R7, 
+                    rd: ARMv5RegNames::R7, 
                     am: AddressingMode { 
                         p: true, u: true, w: false, 
-                        rn: RegNames::R11, 
+                        rn: ARMv5RegNames::R11, 
                         offset_type: OffsetType::Immediate { 
                             offset: 129
                         }
@@ -935,10 +935,10 @@ mod tests {
                 condition: Condition::LO,
                 instruction_type: ARMv5InstructionType::LoadStore { 
                     op: ARMv5LoadStoreOperation::LDRSH, 
-                    rd: RegNames::R3, 
+                    rd: ARMv5RegNames::R3, 
                     am: AddressingMode { 
                         p: true, u: true, w: false, 
-                        rn: RegNames::R6, 
+                        rn: ARMv5RegNames::R6, 
                         offset_type: OffsetType::Immediate { 
                             offset: 0 
                         }
@@ -952,10 +952,10 @@ mod tests {
                 condition: Condition::NE,
                 instruction_type: ARMv5InstructionType::LoadStore { 
                     op: ARMv5LoadStoreOperation::LDRT, 
-                    rd: RegNames::R6, 
+                    rd: ARMv5RegNames::R6, 
                     am: AddressingMode { 
                         p: false, u: false, w: true, 
-                        rn: RegNames::R11, 
+                        rn: ARMv5RegNames::R11, 
                         offset_type: OffsetType::Immediate { 
                             offset: 8
                         }
@@ -969,12 +969,12 @@ mod tests {
                 condition: Condition::GT,
                 instruction_type: ARMv5InstructionType::LoadStore { 
                     op: ARMv5LoadStoreOperation::STR, 
-                    rd: RegNames::R2, 
+                    rd: ARMv5RegNames::R2, 
                     am: AddressingMode { 
                         p: true, u: true, w: false, 
-                        rn: RegNames::SP, 
+                        rn: ARMv5RegNames::SP, 
                         offset_type: OffsetType::ScaledRegister { 
-                            rm: RegNames::R5,
+                            rm: ARMv5RegNames::R5,
                             shift: ShiftType::ROR,
                             shift_imm: 0
                         }
@@ -988,12 +988,12 @@ mod tests {
                 condition: Condition::PL,
                 instruction_type: ARMv5InstructionType::LoadStore { 
                     op: ARMv5LoadStoreOperation::STRB, 
-                    rd: RegNames::R0, 
+                    rd: ARMv5RegNames::R0, 
                     am: AddressingMode { 
                         p: true, u: true, w: true, 
-                        rn: RegNames::R1, 
+                        rn: ARMv5RegNames::R1, 
                         offset_type: OffsetType::ScaledRegister { 
-                            rm: RegNames::R10,
+                            rm: ARMv5RegNames::R10,
                             shift: ShiftType::LSR,
                             shift_imm: 4
                         }
@@ -1007,12 +1007,12 @@ mod tests {
                 condition: Condition::LO,
                 instruction_type: ARMv5InstructionType::LoadStore { 
                     op: ARMv5LoadStoreOperation::STRBT, 
-                    rd: RegNames::R11, 
+                    rd: ARMv5RegNames::R11, 
                     am: AddressingMode { 
                         p: false, u: true, w: true, 
-                        rn: RegNames::R7, 
+                        rn: ARMv5RegNames::R7, 
                         offset_type: OffsetType::ScaledRegister { 
-                            rm: RegNames::R11,
+                            rm: ARMv5RegNames::R11,
                             shift: ShiftType::LSL,
                             shift_imm: 0
                         }
@@ -1026,12 +1026,12 @@ mod tests {
                 condition: Condition::VC,
                 instruction_type: ARMv5InstructionType::LoadStore { 
                     op: ARMv5LoadStoreOperation::STRH, 
-                    rd: RegNames::R5, 
+                    rd: ARMv5RegNames::R5, 
                     am: AddressingMode { 
                         p: true, u: true, w: false, 
-                        rn: RegNames::R8, 
+                        rn: ARMv5RegNames::R8, 
                         offset_type: OffsetType::Register { 
-                            rm: RegNames::R3
+                            rm: ARMv5RegNames::R3
                         }
                     }
                 }
@@ -1043,10 +1043,10 @@ mod tests {
                 condition: Condition::GE,
                 instruction_type: ARMv5InstructionType::LoadStore { 
                     op: ARMv5LoadStoreOperation::STRT, 
-                    rd: RegNames::R0, 
+                    rd: ARMv5RegNames::R0, 
                     am: AddressingMode { 
                         p: false, u: true, w: true, 
-                        rn: RegNames::R12, 
+                        rn: ARMv5RegNames::R12, 
                         offset_type: OffsetType::Immediate { 
                             offset: 0 
                         }
@@ -1063,7 +1063,7 @@ mod tests {
                     op: ARMv5LoadStoreMultipleOperation::LDM,
                     amm: AddressingModeMultiple { 
                         p: false, u: true, w: false, 
-                        rn: RegNames::LR, 
+                        rn: ARMv5RegNames::LR, 
                         register_list: 0b1011000100110000
                     }
                 }
@@ -1077,7 +1077,7 @@ mod tests {
                     op: ARMv5LoadStoreMultipleOperation::LDM,
                     amm: AddressingModeMultiple { 
                         p: true, u: false, w: true, 
-                        rn: RegNames::R10, 
+                        rn: ARMv5RegNames::R10, 
                         register_list: 0b0010000000100100
                     }
                 }
@@ -1091,7 +1091,7 @@ mod tests {
                     op: ARMv5LoadStoreMultipleOperation::STM,
                     amm: AddressingModeMultiple { 
                         p: true, u: true, w: true, 
-                        rn: RegNames::R4, 
+                        rn: ARMv5RegNames::R4, 
                         register_list: 0b1101011100110000
                     }
                 }
@@ -1105,7 +1105,7 @@ mod tests {
                     op: ARMv5LoadStoreMultipleOperation::STM,
                     amm: AddressingModeMultiple { 
                         p: false, u: false, w: false, 
-                        rn: RegNames::R7, 
+                        rn: ARMv5RegNames::R7, 
                         register_list: 0b0000000110000000
                     }
                 }
@@ -1118,7 +1118,7 @@ mod tests {
                 condition: Condition::LE,
                 instruction_type: ARMv5InstructionType::Synchronization { 
                     op: ARMv5SynchronizationOperation::SWP, 
-                    rd: RegNames::LR, rm: RegNames::LR, rn: RegNames::R9
+                    rd: ARMv5RegNames::LR, rm: ARMv5RegNames::LR, rn: ARMv5RegNames::R9
                 }
             }
         ),
@@ -1128,7 +1128,7 @@ mod tests {
                 condition: Condition::VS,
                 instruction_type: ARMv5InstructionType::Synchronization { 
                     op: ARMv5SynchronizationOperation::SWPB, 
-                    rd: RegNames::R2, rm: RegNames::R1, rn: RegNames::R7
+                    rd: ARMv5RegNames::R2, rm: ARMv5RegNames::R1, rn: ARMv5RegNames::R7
                 }
             }
         ),

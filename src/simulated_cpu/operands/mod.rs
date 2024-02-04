@@ -2,15 +2,15 @@ use std::fmt::Display;
 
 use crate::utils::BitAccess;
 
-use super::{SimulatedCPU, ARMv5CPU, names::{RegNames, FlagNames}};
+use super::{SimulatedCPU, ARMv5CPU, names::{ARMv5RegNames, ARMv5FlagNames}};
 use barrel_shifter::ShiftType;
 
 pub mod barrel_shifter;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShifterOperand {
-    ImmediateShift { shift_amount: u8, shift: ShiftType, rm: RegNames },
-    RegisterShift { rs: RegNames, shift: ShiftType, rm: RegNames },
+    ImmediateShift { shift_amount: u8, shift: ShiftType, rm: ARMv5RegNames },
+    RegisterShift { rs: ARMv5RegNames, shift: ShiftType, rm: ARMv5RegNames },
     Immediate { rotate: u8, immediate: u8 }   
 }
 impl Display for ShifterOperand {
@@ -42,13 +42,13 @@ impl Display for ShifterOperand {
 pub enum OffsetType {
     Immediate { offset: u16 },
     // this is basically the same as ScaledRegister with 0 for shift parameters
-    Register { rm: RegNames },
-    ScaledRegister { shift_imm: u8, shift: ShiftType, rm: RegNames }
+    Register { rm: ARMv5RegNames },
+    ScaledRegister { shift_imm: u8, shift: ShiftType, rm: ARMv5RegNames }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AddressingMode {
-    pub p: bool, pub u: bool, pub w: bool, pub rn: RegNames,
+    pub p: bool, pub u: bool, pub w: bool, pub rn: ARMv5RegNames,
     pub offset_type: OffsetType
 }
 impl Display for AddressingMode {
@@ -65,7 +65,7 @@ impl Display for AddressingMode {
                 format!(", {rm}, {shift} #{shift_imm}")
             }
         };
-        let rn: RegNames = self.rn;
+        let rn: ARMv5RegNames = self.rn;
         if self.p {
             if self.w { write!(f,"[{rn}{offset_string}]!") }
             else { write!(f,"[{rn}{offset_string}]")}
@@ -77,14 +77,14 @@ impl Display for AddressingMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AddressingModeMultiple { 
     pub p: bool, pub u: bool, pub w: bool, 
-    pub rn: RegNames, pub register_list: u16
+    pub rn: ARMv5RegNames, pub register_list: u16
 }
 impl Display for AddressingModeMultiple {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut registers: Vec<String> = Vec::new();
         for i in 0..16 {
             if self.register_list.get_bit(i) {
-                registers.push(format!("{}", RegNames::from(i as u32)));
+                registers.push(format!("{}", ARMv5RegNames::from(i as u32)));
             }
         }
         write!(f, "{0}{1} {2}{3}, {{{4}}}",
@@ -99,14 +99,14 @@ impl Display for AddressingModeMultiple {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum BranchOperator {
-    Register(RegNames),
+    Register(ARMv5RegNames),
     Offset(i32, bool),
 }
 
 impl ARMv5CPU {
     // returns shifted value + possibly new carry flag
     pub fn perform_shift(&self, so: ShifterOperand) -> (i32, bool) {
-        let carry = self.flags[FlagNames::C];
+        let carry = self.flags[ARMv5FlagNames::C];
         match so {
             ShifterOperand::ImmediateShift { shift_amount, shift, rm } => {
                 let value: i32 = self.get_register_intern(rm);
@@ -138,7 +138,7 @@ impl ARMv5CPU {
             },
             OffsetType::ScaledRegister { shift_imm, shift, rm } => {
                 let value: i32 = self.get_register_intern(rm);
-                let carry: bool = self.flags[FlagNames::C];
+                let carry: bool = self.flags[ARMv5FlagNames::C];
                 
                 if let (ShiftType::ROR, 0) = (&shift, shift_imm) {
                     ShiftType::RRX.compute(value, 0, carry).0 as u32
@@ -195,10 +195,10 @@ impl ARMv5CPU {
 #[cfg(test)]
 mod tests {
     use crate::simulated_cpu::{
-        SimulatedCPU, ARMv5CPU, names::{FlagNames, RegNames}, 
+        SimulatedCPU, ARMv5CPU, names::{ARMv5FlagNames, ARMv5RegNames}, 
         operands::{OffsetType, AddressingModeMultiple}
     };
-    use crate::utils::{ConsoleOutput, ConsoleExit, T, F};
+    use crate::utils::{T, F};
     use super::{ShifterOperand, barrel_shifter::ShiftType, AddressingMode};
 
     macro_rules! shifter_operand_tests {
@@ -209,7 +209,7 @@ mod tests {
                 #[allow(overflowing_literals)]
                 let (so, val_in, shift, c_in, val_out, c_out) = $test_values;
 
-                let mut cpu = ARMv5CPU::new(ConsoleOutput::new(), ConsoleExit);
+                let mut cpu = ARMv5CPU::new();
 
                 match so {
                     ShifterOperand::ImmediateShift { rm, .. } => {
@@ -221,7 +221,7 @@ mod tests {
                     }
                     _ => {}
                 }
-                cpu.set_flag(FlagNames::C, c_in);
+                cpu.set_flag(ARMv5FlagNames::C, c_in);
 
                 let (res_val, res_c) = cpu.perform_shift(so);
 
@@ -240,25 +240,25 @@ mod tests {
         ),
         shifter_operand_test_2: (
             ShifterOperand::ImmediateShift { 
-                shift_amount: 26, shift: ShiftType::LSR, rm: RegNames::R7 
+                shift_amount: 26, shift: ShiftType::LSR, rm: ARMv5RegNames::R7 
             }, 
             0xCF2A_C100, 0, F, 51, T
         ),
         shifter_operand_test_3: (
             ShifterOperand::RegisterShift { 
-                rs: RegNames::LR, shift: ShiftType::ROR, rm: RegNames::LR 
+                rs: ARMv5RegNames::LR, shift: ShiftType::ROR, rm: ARMv5RegNames::LR 
             }, 
             0x8A9B_DAEC, 0x8A9B_DAEC, F, 0xAEC8A9BD, T
         ),
         shifter_operand_test_4: (
             ShifterOperand::RegisterShift { 
-                rs: RegNames::R2, shift: ShiftType::ASR, rm: RegNames::R11 
+                rs: ARMv5RegNames::R2, shift: ShiftType::ASR, rm: ARMv5RegNames::R11 
             }, 
             0x80D3_1E6E, 0, T, 0x80D3_1E6E, T
         ),
         shifter_operand_test_5: (
             ShifterOperand::ImmediateShift { 
-                shift_amount: 0, shift: ShiftType::ROR, rm: RegNames::R1
+                shift_amount: 0, shift: ShiftType::ROR, rm: ARMv5RegNames::R1
             }, 
             0x7298_6CBC, 0, T, 0xB94C365E, F
         )
@@ -273,7 +273,7 @@ mod tests {
                 #[allow(overflowing_literals)]
                 let (am, addr_in, offset_in, addr_out, addr_mem) = $test_values;
 
-                let mut cpu = ARMv5CPU::new(ConsoleOutput::new(), ConsoleExit);
+                let mut cpu = ARMv5CPU::new();
                 cpu.set_register(am.rn, addr_in);
 
                 match am.offset_type {
@@ -297,7 +297,7 @@ mod tests {
     addressing_mode_tests! {
         addressing_mode_test_1: (
             AddressingMode {
-                p: T, u: T, w: F, rn: RegNames::R5,
+                p: T, u: T, w: F, rn: ARMv5RegNames::R5,
                 offset_type: OffsetType::Immediate {
                     offset: 0x40A6
                 }
@@ -305,24 +305,24 @@ mod tests {
         ),
         addressing_mode_test_2: (
             AddressingMode {
-                p: T, u: F, w: F, rn: RegNames::R8,
+                p: T, u: F, w: F, rn: ARMv5RegNames::R8,
                 offset_type: OffsetType::Register { 
-                    rm: RegNames::LR
+                    rm: ARMv5RegNames::LR
                 }
             }, 0x0196_608F, 0x0009_4AB9, 0x018D_15D6, 0x0196_608F
         ),
         addressing_mode_test_3: (
             AddressingMode {
-                p: F, u: T, w: T, rn: RegNames::PC,
+                p: F, u: T, w: T, rn: ARMv5RegNames::PC,
                 offset_type: OffsetType::ScaledRegister { 
                     shift_imm: 11, shift: ShiftType::LSR, 
-                    rm: RegNames::R4 
+                    rm: ARMv5RegNames::R4 
                 }
             }, 0x01F1_7621, 0xFF9F_14FF, 0x01F1_7629, 0x0211_6A0B
         ),
         addressing_mode_test_4: (
             AddressingMode {
-                p: T, u: F, w: T, rn: RegNames::R9,
+                p: T, u: F, w: T, rn: ARMv5RegNames::R9,
                 offset_type: OffsetType::Immediate {
                     offset: 0x0005
                 }
@@ -330,10 +330,10 @@ mod tests {
         ),
         addressing_mode_test_5: (
             AddressingMode {
-                p: F, u: T, w: T, rn: RegNames::R6,
+                p: F, u: T, w: T, rn: ARMv5RegNames::R6,
                 offset_type: OffsetType::ScaledRegister { 
                     shift_imm: 7, shift: ShiftType::LSL, 
-                    rm: RegNames::PC 
+                    rm: ARMv5RegNames::PC 
                 }
             }, 0xFFFF_FFFF, 0x0000_0002, 0xFFFF_FFFF, 0x0000_04FF
         )
@@ -348,7 +348,7 @@ mod tests {
                 #[allow(overflowing_literals)]
                 let (amm, addr_in, addr_mem, addrs_out) = $test_values;
 
-                let mut cpu = ARMv5CPU::new(ConsoleOutput::new(), ConsoleExit);
+                let mut cpu = ARMv5CPU::new();
                 cpu.set_register(amm.rn, addr_in);
 
                 let res_addrs = cpu.compute_modify_address_multiple(&amm);
@@ -363,7 +363,7 @@ mod tests {
     addressing_mode_multiple_tests! {
         addressing_mode_multiple_test_1: (
             AddressingModeMultiple {
-                p: T, u: T, w: F, rn: RegNames::R5,
+                p: T, u: T, w: F, rn: ARMv5RegNames::R5,
                 register_list: 0x3A46
             }, 0x02A2_E28D, 0x02A2_E28D, [
                 0x02A2_E291, 0x02A2_E295, 0x02A2_E299, 0x02A2_E29D,
@@ -372,7 +372,7 @@ mod tests {
         ),
         addressing_mode_multiple_test_2: (
             AddressingModeMultiple {
-                p: T, u: F, w: T, rn: RegNames::R0,
+                p: T, u: F, w: T, rn: ARMv5RegNames::R0,
                 register_list: 0x9E9B
             }, 0x0252_BC7A, 0x0252_BC52, [
                 0x0252_BC52, 0x0252_BC56, 0x0252_BC5A, 0x0252_BC5E,
@@ -382,7 +382,7 @@ mod tests {
         ),
         addressing_mode_multiple_test_3: (
             AddressingModeMultiple {
-                p: F, u: T, w: F, rn: RegNames::R9,
+                p: F, u: T, w: F, rn: ARMv5RegNames::R9,
                 register_list: 0x208A
             }, 0x000B_B297, 0x000B_B297, [
                 0x000B_B297, 0x000B_B29B, 0x000B_B29F, 0x000B_B2A3
@@ -390,7 +390,7 @@ mod tests {
         ),
         addressing_mode_multiple_test_4: (
             AddressingModeMultiple {
-                p: F, u: F, w: T, rn: RegNames::SP,
+                p: F, u: F, w: T, rn: ARMv5RegNames::SP,
                 register_list: 0x6C03
             }, 0x0043_002B, 0x0043_0013, [
                 0x0043_0017, 0x0043_001B, 0x0043_001F, 0x0043_0023, 

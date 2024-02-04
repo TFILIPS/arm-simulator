@@ -1,13 +1,10 @@
 use std::{io::Write, collections::HashMap};
 
-use instructions::{Instruction, ARMv5Instruction};
-use names::{RegNames, FlagNames};
-use instruction_decoder::{InstructionDecoder, ARMv5Decoder};
+use crate::utils::{Endian, slice_to_u32, Memory, MemoryException};
 
-use crate::utils::{
-    Endian, slice_to_u32, OutputDevice, 
-    ExitBehaviour, Memory, MemoryException
-};
+use instructions::{Instruction, ARMv5Instruction};
+use names::{ARMv5RegNames, ARMv5FlagNames};
+use instruction_decoder::{InstructionDecoder, ARMv5Decoder};
 
 pub mod names;
 
@@ -16,47 +13,74 @@ mod operands;
 mod instruction_decoder;
 
 //Here R is the type of the registers, which should be i8, i16, i32 or i64.
-pub trait SimulatedCPU<R> {
-    fn step(&mut self) -> Result<SimulationEvent, SimulationException>;
-    fn disassemble_memory(
-        &self, start: u32, end: u32, labels: Vec<(u32, String)>
-    ) -> String;
+pub trait SimulatedCPU {
+    type RegType;
+    type RegNames;
+    type FlagNames;
 
-    fn get_register(&self, register: RegNames) -> R;
-    fn set_register(&mut self, register: RegNames, value: R);
-    fn get_registers(&self) -> &[R];
-    fn get_flag(&self, flag: FlagNames) -> bool;
-    fn set_flag(&mut self, flag: FlagNames, value: bool);
+    fn step(&mut self) -> Result<SimulationEvent, SimulationException>;
+    fn disassemble_memory(&self, start: u32, end: u32, labels: Vec<(u32, String)>) -> String;
+    fn get_register(&self, register: Self::RegNames) -> Self::RegType;
+    fn set_register(&mut self, register: Self::RegNames, value: Self::RegType);
+    fn get_registers(&self) -> &[Self::RegType];
+    fn get_flag(&self, flag: Self::FlagNames) -> bool;
+    fn set_flag(&mut self, flag: Self::FlagNames, value: bool);
     fn get_flags(&self) -> &[bool];
     fn set_encoding(&mut self, encoding: Endian);
+}
+
+pub enum SimulationEvent {
+    None,
+    Breakpoint,
+    Exit{exit_code: i32},
+    ConsoleOutput{stream: i32, message: Vec<u8>}
+}
+
+#[derive(Debug)]
+pub enum SimulationExceptionKind {
+    DataAbort{memory_address: usize, size: usize}, 
+    UnsupportedInstruction, 
+    UndefinedInstruction
+}
+#[derive(Debug)]
+pub struct SimulationException { 
+    pub kind: SimulationExceptionKind, 
+    pub msg: String 
+}
+impl From<MemoryException> for SimulationException {
+    fn from(value: MemoryException) -> Self {
+        SimulationException { 
+            kind: SimulationExceptionKind::DataAbort { 
+                memory_address: value.address, 
+                size: value.size 
+            },
+            msg: value.msg
+        }
+    }
 }
 
 pub struct ARMv5CPU {
     registers: [i32; 16],
     flags: [bool; 4],
     memory: Vec<u8>,
-    encoding: Endian,
-    output_device: Box<dyn OutputDevice>,
-    exit_behaviour: Box<dyn ExitBehaviour>
+    encoding: Endian
 }
-impl SimulatedCPU<i32> for ARMv5CPU {
-    fn step(&mut self) -> Result<SimulationEvent, SimulationException> {
-        let address: u32 = self.registers[RegNames::PC] as u32;
-        let result: Result<SimulationEvent, SimulationException> = 
-            self.load_and_exectue_instruction(address);
+impl SimulatedCPU for ARMv5CPU {
+    type RegType = i32;
+    type RegNames = ARMv5RegNames;
+    type FlagNames = ARMv5FlagNames;
 
-        if let Err(err) = &result {
-            self.output_device.output_err(&err.msg.as_bytes());
-            self.exit_behaviour.exit(-1);
-        }
+    fn step(&mut self) -> Result<SimulationEvent, SimulationException> {
+        let address: u32 = self.registers[ARMv5RegNames::PC] as u32;
+        let result: SimulationEvent = self.load_and_exectue_instruction(address)?;
         
         //only increase programcounter if it was not changed by the instruction
-        if address == (self.registers[RegNames::PC] as u32) {
-            self.registers[RegNames::PC] = 
-                self.registers[RegNames::PC].wrapping_add(4);
+        if address == (self.registers[ARMv5RegNames::PC] as u32) {
+            self.registers[ARMv5RegNames::PC] = 
+                self.registers[ARMv5RegNames::PC].wrapping_add(4);
         }
 
-        result
+        Ok(result)
     }
 
     fn disassemble_memory(
@@ -76,19 +100,18 @@ impl SimulatedCPU<i32> for ARMv5CPU {
                 .expect("Memory access out of bounds!");
             let bits: u32 = slice_to_u32(&bytes, &self.encoding);
 
-            let instruction: Box<dyn Instruction<ARMv5CPU, i32>> = 
-                Box::new(ARMv5Decoder::decode(bits));
+            let instruction: ARMv5Instruction = ARMv5Decoder::decode(bits);
 
             writeln!(buffer, "{address:08X} |     {instruction}").unwrap();
         }
         String::from_utf8_lossy(&buffer).to_string()
     }
 
-    fn get_register(&self, register: RegNames) -> i32 {
+    fn get_register(&self, register: ARMv5RegNames) -> i32 {
         self.registers[register]
     }
 
-    fn set_register(&mut self, register: RegNames, value: i32) {
+    fn set_register(&mut self, register: ARMv5RegNames, value: i32) {
         self.registers[register] = value;
     }
 
@@ -96,11 +119,11 @@ impl SimulatedCPU<i32> for ARMv5CPU {
         &self.registers
     }
 
-    fn get_flag(&self, flag: FlagNames) -> bool {
+    fn get_flag(&self, flag: ARMv5FlagNames) -> bool {
         self.flags[flag]
     }
 
-    fn set_flag(&mut self, flag: FlagNames, value: bool) {
+    fn set_flag(&mut self, flag: ARMv5FlagNames, value: bool) {
         self.flags[flag] = value
     }
 
@@ -138,15 +161,12 @@ impl Memory for ARMv5CPU {
 impl ARMv5CPU {
     const MEMORY_SIZE: usize = 2usize.pow(26);
 
-    pub fn new<O, E>(output_device: O, exit_behaviour: E) -> Self 
-    where O: OutputDevice + 'static, E: ExitBehaviour + 'static {
+    pub fn new() -> Self {
         Self {
             registers: [0i32; 16],
             flags: [false; 4],
             memory: vec![0u8; ARMv5CPU::MEMORY_SIZE],
-            encoding: Endian::Little,
-            output_device: Box::new(output_device),
-            exit_behaviour: Box::new(exit_behaviour)
+            encoding: Endian::Little
         }
     }
 
@@ -158,9 +178,9 @@ impl ARMv5CPU {
         self.encoding = Endian::Little;
     }
 
-    fn get_register_intern(&self, register: RegNames) -> i32 {
-        if let RegNames::PC = register { 
-            self.registers[RegNames::PC].wrapping_add(8) 
+    fn get_register_intern(&self, register: ARMv5RegNames) -> i32 {
+        if let ARMv5RegNames::PC = register { 
+            self.registers[ARMv5RegNames::PC].wrapping_add(8) 
         }
         else { 
             self.registers[register] 
@@ -214,35 +234,6 @@ impl ARMv5CPU {
                     )
                 })
             }
-        }
-    }
-}
-
-pub enum SimulationEvent {
-    None,
-    Exit(i32),
-    Breakpoint
-}
-
-#[derive(Debug)]
-pub enum SimulationExceptionKind {
-    DataAbort{memory_address: usize, size: usize}, 
-    UnsupportedInstruction, 
-    UndefinedInstruction
-}
-#[derive(Debug)]
-pub struct SimulationException { 
-    kind: SimulationExceptionKind, 
-    msg: String 
-}
-impl From<MemoryException> for SimulationException {
-    fn from(value: MemoryException) -> Self {
-        SimulationException { 
-            kind: SimulationExceptionKind::DataAbort { 
-                memory_address: value.address, 
-                size: value.size 
-            },
-            msg: value.msg
         }
     }
 }

@@ -2,22 +2,22 @@ use std::{ops::{Index, IndexMut}, mem::transmute, fmt::Display};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
-pub enum FlagNames { 
+pub enum ARMv5FlagNames { 
     N, Z, C, V 
 }
 // Enable enum FlagNames to index arrays
-impl<T> Index<FlagNames> for [T] {
+impl<T> Index<ARMv5FlagNames> for [T] {
     type Output = T;
-    fn index(&self, index: FlagNames) -> &Self::Output {
+    fn index(&self, index: ARMv5FlagNames) -> &Self::Output {
         return &self[index as usize];
     }
 }
-impl<T> IndexMut<FlagNames> for [T] {
-    fn index_mut(&mut self, index: FlagNames) -> &mut Self::Output {
+impl<T> IndexMut<ARMv5FlagNames> for [T] {
+    fn index_mut(&mut self, index: ARMv5FlagNames) -> &mut Self::Output {
         return &mut self[index as usize];
     }
 }
-impl From<u32> for FlagNames{
+impl From<u32> for ARMv5FlagNames{
     fn from(value: u32) -> Self {
         const NUM_FLAGS: u32 = 16;
         if value >= NUM_FLAGS {
@@ -29,25 +29,25 @@ impl From<u32> for FlagNames{
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
-pub enum RegNames { 
+pub enum ARMv5RegNames { 
     R0, R1, R2, R3, R4, R5, R6, 
     R7, R8, R9, R10, R11, R12,
     SP, LR, PC
 }
 // Enable enum RegNames to index arrays
-impl<T> Index<RegNames> for [T] {
+impl<T> Index<ARMv5RegNames> for [T] {
     type Output = T;
-    fn index(&self, index: RegNames) -> &Self::Output {
+    fn index(&self, index: ARMv5RegNames) -> &Self::Output {
         return &self[index as usize];
     }
 }
-impl<T> IndexMut<RegNames> for [T] {
-    fn index_mut(&mut self, index: RegNames) -> &mut Self::Output {
+impl<T> IndexMut<ARMv5RegNames> for [T] {
+    fn index_mut(&mut self, index: ARMv5RegNames) -> &mut Self::Output {
         return &mut self[index as usize];
     }
 }
 // Allow convertion from u32 to RegNames
-impl From<u32> for RegNames {
+impl From<u32> for ARMv5RegNames {
     fn from(value: u32) -> Self {
         const NUM_REGISTERS: u32 = 16;
         if value >= NUM_REGISTERS {
@@ -56,7 +56,7 @@ impl From<u32> for RegNames {
         unsafe { transmute(value) }
     }
 }
-impl Display for RegNames {
+impl Display for ARMv5RegNames {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
     }
