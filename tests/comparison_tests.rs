@@ -13,31 +13,31 @@ struct State {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct Behaviour(Vec<State>);
+struct Behavior(Vec<State>);
 
 
 //ToDo: Implement Error for custom error types and get rid of unwraps
-macro_rules! behaviour_tests {
+macro_rules! behavior_tests {
     ($($test_name:ident: (
-        executable: $executable:expr, behaviour: $behaviour:expr
+        executable: $executable:expr, behavior: $behavior:expr
     )),*)  => ($(
         #[test]
         fn $test_name() {
-            let behaviour_file = File::open($behaviour)
-                .expect("Behaviour File not found!");
-            let reader = BufReader::new(behaviour_file);
-            let expected_behaviour: Behaviour = serde_json::from_reader(reader)
-                .expect("Could not parse behaviour file!");
+            let behavior_file = File::open($behavior)
+                .expect("Behavior File not found!");
+            let reader = BufReader::new(behavior_file);
+            let expected_behavior: Behavior = serde_json::from_reader(reader)
+                .expect("Could not parse behavior file!");
             // The struct is only needed for parsing the JSON
-            let expected_behaviour = expected_behaviour.0;
+            let expected_behavior = expected_behavior.0;
 
             let mut sim = ARMSimulator::new();
             sim.load_elf_file($executable).unwrap();
-            // Syncronize the stack pointer of simulator and behaviour
-            sim.set_register(ARMv5RegNames::SP, expected_behaviour[0].registers[13]);
+            // Synchronize the stack pointer of simulator and behavior
+            sim.set_register(ARMv5RegNames::SP, expected_behavior[0].registers[13]);
             
-            for expected_state in expected_behaviour {
-                // We produce the expected behaviour with QEMU and
+            for expected_state in expected_behavior {
+                // We produce the expected behavior with QEMU and
                 // GDB. Sometimes two instructions are combined into one
                 // so sometimes we need to step twice
                 if sim.get_register(ARMv5RegNames::PC) != expected_state.registers[15] {
@@ -61,30 +61,30 @@ macro_rules! behaviour_tests {
     )*)
 }
 
-behaviour_tests! {
+behavior_tests! {
     hallo_test: (
         executable: "./sample_programs/hallo",
-        behaviour: "./tests/behaviours/hallo-expected-behaviour.json"
+        behavior: "./tests/behaviors/hallo-expected-behavior.json"
     ),
-    // Detected misstake: C flag behaves differently in subtractions
+    // Detected mistake: C flag behaves differently in subtractions
     fib_test: (
         executable: "./sample_programs/fib",
-        behaviour: "./tests/behaviours/fib-expected-behaviour.json"
+        behavior: "./tests/behaviors/fib-expected-behavior.json"
     ),
 
     scalar_test: (
         executable: "./sample_programs/scalar",
-        behaviour: "./tests/behaviours/scalar-expected-behaviour.json"
+        behavior: "./tests/behaviors/scalar-expected-behavior.json"
     ),
     
     functions_test: (
         executable: "./sample_programs/functions",
-        behaviour: "./tests/behaviours/functions-expected-behaviour.json"
+        behavior: "./tests/behaviors/functions-expected-behavior.json"
     ),
 
     fold_test: (
         executable: "./sample_programs/fold",
-        behaviour: "./tests/behaviours/fold-expected-behaviour.json"
+        behavior: "./tests/behaviors/fold-expected-behavior.json"
     )
 }
 
@@ -123,7 +123,7 @@ output_tests! {
         executable: "./sample_programs/hallo",
         output: "./tests/outputs/hallo-expected-output.txt"
     ),
-    // Detected misstake: C flag behaves differently in subtractions
+    // Detected mistake: C flag behaves differently in subtractions
     fib_output_test: (
         executable: "./sample_programs/fib",
         output: "./tests/outputs/fib-expected-output.txt"

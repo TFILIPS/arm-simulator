@@ -7,7 +7,7 @@ import subprocess
 from pygdbmi.gdbcontroller import GdbController
 
 DEFAULT_PORT = 4545
-BEHAVIOUR_FILE_FORMAT = "./%s-expected-behaviour.json"
+BEHAVIOR_FILE_FORMAT = "./%s-expected-behavior.json"
 OUTPUT_FILE_FORMAT = "./%s-expected-output.txt"
 
 REGISTER_NAMES = [
@@ -82,7 +82,7 @@ if __name__ == '__main__':
         gdb, sp = initialize_gdb_controller(test_program_path, port)
 
         step_counter = 0
-        behaviour_data = []
+        behavior_data = []
         while qemu.poll() is None:
             reg_vals_qemu, flag_vals_qemu = get_qemu_state(gdb)
 
@@ -90,7 +90,7 @@ if __name__ == '__main__':
             print_register_list(reg_vals_qemu)
             print_flags(flag_vals_qemu)
 
-            behaviour_data.append({
+            behavior_data.append({
                 "registers": reg_vals_qemu,
                 "flags": flag_vals_qemu
             })
@@ -109,7 +109,7 @@ if __name__ == '__main__':
         if output_file is not None:
             output_file.close()
 
-    print("\nWriting behaviour file...")
-    with open(BEHAVIOUR_FILE_FORMAT % test_program_name, "w+") as behaviour_file:
-        json.dump(behaviour_data, behaviour_file)
+    print("\nWriting behavior file...")
+    with open(BEHAVIOR_FILE_FORMAT % test_program_name, "w+") as behavior_file:
+        json.dump(behavior_data, behavior_file)
     print("Done!")
