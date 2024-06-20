@@ -12,7 +12,6 @@ mod instructions;
 mod operands;
 mod instruction_decoder;
 
-//Here R is the type of the registers, which should be i8, i16, i32 or i64.
 pub trait SimulatedCPU {
     type RegType;
     type RegNames;
@@ -72,9 +71,9 @@ impl SimulatedCPU for ARMv5CPU {
 
     fn step(&mut self) -> Result<SimulationEvent, SimulationException> {
         let address: u32 = self.registers[ARMv5RegNames::PC] as u32;
-        let result: SimulationEvent = self.load_and_exectue_instruction(address)?;
+        let result: SimulationEvent = self.load_and_execute_instruction(address)?;
         
-        //only increase programcounter if it was not changed by the instruction
+        //only increase program counter if it was not changed by the instruction
         if address == (self.registers[ARMv5RegNames::PC] as u32) {
             self.registers[ARMv5RegNames::PC] = 
                 self.registers[ARMv5RegNames::PC].wrapping_add(4);
@@ -89,7 +88,7 @@ impl SimulatedCPU for ARMv5CPU {
         let mut buffer: Vec<u8> = Vec::new();
         let label_map: HashMap<u32, String> = labels.into_iter().collect();
 
-        // ToDo: Return a list of tupels instead of a single string
+        // ToDo: Return a list of tuples instead of a single string
         for address in (start..end).step_by(4) {
             if let Some(label) = label_map.get(&address) {
                 writeln!(buffer, "-------- | {label}:").unwrap();
@@ -170,7 +169,8 @@ impl ARMv5CPU {
         }
     }
 
-    #[allow(dead_code)] //This is not actually dead code, but the compiler thinks so
+    //This is not actually dead code, but the compiler thinks so
+    #[allow(dead_code)] 
     pub fn reset(&mut self) {
         self.registers = [0i32; 16];
         self.flags = [false; 4];
@@ -204,7 +204,7 @@ impl ARMv5CPU {
         })
     }
 
-    fn load_and_exectue_instruction(
+    fn load_and_execute_instruction(
         &mut self, address: u32
     ) -> Result<SimulationEvent, SimulationException>{
         match self.get_memory(address, 4) {

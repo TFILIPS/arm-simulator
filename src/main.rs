@@ -1,34 +1,33 @@
-use std::{process::exit, env};
+use std::{env, process::exit};
 
 use arm_simulator::{
-    ARMSimulator, SimulationEvent, SimulationException,
-    utils::{ConsoleOutput, ExitOnError, OutputDevice}
+    utils::{ConsoleOutput, ExitOnError, OutputDevice}, ARMSimulator, SimulationEvent, SimulationException
 };
 
 fn main() {
     let (path, disassemble): (String, bool) = parse_arguments();
 
-    let mut output_devie: ConsoleOutput = ConsoleOutput::new();
+    let mut output_device: ConsoleOutput = ConsoleOutput::new();
     let mut simulator: ARMSimulator = ARMSimulator::new();
-    simulator.load_elf_file(&path).unwarp_or_exit();
+    simulator.load_elf_file(&path).unwrap_or_exit();
 
     if disassemble {
-        let disassembly:String = simulator.get_disassembly().unwarp_or_exit();
+        let disassembly:String = simulator.get_disassembly().unwrap_or_exit();
         print!("{disassembly}");
     }
     else {
         loop {
             match simulator.step() {
                 Ok(SimulationEvent::ConsoleOutput { stream, message }) => {
-                    if stream == 1 { output_devie.output(&message) }
-                    else if stream == 2 { output_devie.output_err(&message) }
+                    if stream == 1 { output_device.output(&message) }
+                    else if stream == 2 { output_device.output_err(&message) }
                 },
                 Ok(SimulationEvent::Exit { exit_code }) => {
-                    output_devie.flush();
+                    output_device.flush();
                     exit(exit_code);
                 },
                 Err(SimulationException { msg, .. }) => {
-                    output_devie.flush();
+                    output_device.flush();
                     eprintln!("{msg}");
                     exit(1);
                 },

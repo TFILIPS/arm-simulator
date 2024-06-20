@@ -47,7 +47,7 @@ impl ARMSimulator {
 
     pub fn multiple_steps(&mut self, n: usize) -> Result<SimulationEvent, SimulationException> { 
         for _ in 0..n {
-            if self.hit_active_breakepoint() {
+            if self.hit_active_breakpoint() {
                 return Ok(SimulationEvent::Breakpoint);
             }
 
@@ -141,7 +141,7 @@ impl ARMSimulator {
 }
 
 impl ARMSimulator {
-    fn hit_active_breakepoint(&mut self) -> bool {
+    fn hit_active_breakpoint(&mut self) -> bool {
         let address: u32 = self.simulated_cpu.get_register(ARMv5RegNames::PC) as u32;
         if let Some(active) = self.dynamic_breakpoints.get(&address) {
             if *active {

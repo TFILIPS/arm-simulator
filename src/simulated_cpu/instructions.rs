@@ -78,7 +78,7 @@ impl ARMv5DataProcessingOperation {
 
     pub fn from_bits(bits: u32) -> ARMv5DataProcessingOperation {
         if bits >= ARMv5DataProcessingOperation::NUM_OPERATIONS {
-            panic!("Convertion to ARMv5DataProcessingOperation failed!");
+            panic!("Conversion to ARMv5DataProcessingOperation failed!");
         }
         unsafe { transmute(bits) }
     }
@@ -794,9 +794,9 @@ impl ARMv5CPU {
         &mut self, l: bool, bo: &BranchOperator
     ) -> Result<SimulationEvent, SimulationException> {
         let prog_addr: i32 = self.get_register_intern(ARMv5RegNames::PC);
-        // This behaviour is incorrect! After switching to 
+        // This behavior is incorrect! After switching to 
         // Thumb state on a non T CPU the next executed instruction
-        // causes an UndefinedInstructionExeption. Then the cpu
+        // causes an UndefinedInstructionException. Then the cpu
         // switches back to ARM.
         if l {
             let link_addr: i32 = prog_addr.wrapping_sub(4);
@@ -829,7 +829,7 @@ impl ARMv5CPU {
     ) -> Result<SimulationEvent, SimulationException> {
         let mut address: u32 = self.compute_modify_address(am);
 
-        // do this only if unaligned access flag is 0 (maybe only in armv6 but need to check)
+        // do this only if unaligned access flag is 0 (maybe only in ARMv6 but need to check)
         let rot_bits: u32 = (address as u32).cut_bits(0..=1) * 8;
         address &= 0xFFFFFFFC;
 
@@ -945,7 +945,7 @@ impl ARMv5CPU {
         self.str(rd, am)
     }
 
-    //do not change any register if data abourt (better then specification)
+    //do not change any register if data abort (better then specification)
     fn ldm(
         &mut self, amm: AddressingModeMultiple
     ) -> Result<SimulationEvent, SimulationException> {

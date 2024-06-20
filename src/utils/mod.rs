@@ -1,4 +1,4 @@
-use std::{ops::{Bound, RangeBounds}, process::exit};
+use std::{error::Error, ops::{Bound, RangeBounds}, process::exit};
 
 pub const F: bool = false;
 pub const T: bool = true;
@@ -145,11 +145,22 @@ impl ConsoleOutput {
     }
 }
 
-
-// ToDo: implement Error [https://stackoverflow.com/questions/42584368/how-do-you-define-custom-error-types-in-rust]
 #[derive(Debug)]
 pub struct MemoryException {
     pub address: usize, pub size: usize, pub msg: String
+}
+
+impl Error for MemoryException {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        None
+    }
+}
+
+impl std::fmt::Display for MemoryException {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "MemoryException: {} at address {} with size {}",
+            self.msg, self.address, self.size)
+    }
 }
 
 pub trait Memory {
@@ -163,11 +174,11 @@ pub trait Memory {
 }
 
 pub trait ExitOnError<T> {
-    fn unwarp_or_exit(self) -> T;
+    fn unwrap_or_exit(self) -> T;
 }
 
 impl<T> ExitOnError<T> for Result<T, &'static str> {
-    fn unwarp_or_exit(self) -> T {
+    fn unwrap_or_exit(self) -> T {
         self.unwrap_or_else(|msg| {
             eprintln!("{msg}");
             exit(1);
