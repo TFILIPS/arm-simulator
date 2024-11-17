@@ -279,10 +279,12 @@ impl Display for ARMv5Instruction {
                     ARMv5DataProcessingOperation::TST |
                     ARMv5DataProcessingOperation::TEQ |
                     ARMv5DataProcessingOperation::CMP |
-                    ARMv5DataProcessingOperation::CMN |
+                    ARMv5DataProcessingOperation::CMN => write!(
+                        f, "{:?}{cond} {rn}, {so}", op
+                    ),
                     ARMv5DataProcessingOperation::MOV |
                     ARMv5DataProcessingOperation::MVN => write!(
-                        f, "{:?}{cond} {rd}, {so}", op
+                        f, "{:?}{s}{cond} {rd}, {so}", op
                     ),
                     _ => write!(
                         f, "{:?}{s}{cond} {rd}, {rn}, {so}", op
