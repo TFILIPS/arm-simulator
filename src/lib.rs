@@ -77,6 +77,10 @@ impl ARMSimulator {
     }
 
     pub fn step(&mut self) {
+        let address: u32 = self.get_program_counter();
+        if let Some(false) = self.breakpoints.get(&address) {
+            self.breakpoints.insert(address, true);
+        }
         self.simulated_cpu.step().unwrap_or(SimulationEvent::None);
     }
 
