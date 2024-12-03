@@ -458,7 +458,6 @@ impl ARMv5CPU {
         Ok(SimulationEvent::None)
     }
 
-    //here to do correct c flag
     fn sbc(
         &mut self, s: bool, rn: ARMv5RegNames, rd: ARMv5RegNames, so: ShifterOperand
     ) -> Result<SimulationEvent, SimulationException> {
@@ -480,7 +479,6 @@ impl ARMv5CPU {
         Ok(SimulationEvent::None)
     }
 
-    //here to do correct c flag
     fn rsc(
         &mut self, s: bool, rn: ARMv5RegNames, rd: ARMv5RegNames, so: ShifterOperand
     ) -> Result<SimulationEvent, SimulationException> {

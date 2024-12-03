@@ -40,7 +40,7 @@ fn main() {
 fn parse_arguments() -> (String, bool) {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 || args.len() > 3 {
-        println!("Usage: {:} path_to_executable [--disassemble]", args[0]);
+        println!("Usage: ./{:} path_to_executable [--disassemble]", args[0]);
         exit(1);
     }
     let mut path: String = String::new();

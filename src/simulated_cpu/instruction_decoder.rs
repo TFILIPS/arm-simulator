@@ -19,7 +19,7 @@ impl InstructionDecoder<ARMv5Instruction, ARMv5CPU> for ARMv5Decoder {
     fn decode(instruction_bits: u32) -> ARMv5Instruction {
         let category = if instruction_bits.cut_bits(28..=31) != 0b1111 {
             match instruction_bits.cut_bits(26..=27) {
-                0b00 => ARMv5Decoder::data_and_miscellaneos,
+                0b00 => ARMv5Decoder::data_and_miscellaneous,
                 0b01 => ARMv5Decoder::load_store,
                 0b10 => ARMv5Decoder::branch_and_block_transfer,
                 0b11 => ARMv5Decoder::coprocessor_and_swi,
@@ -36,7 +36,7 @@ impl ARMv5Decoder {
         instruction_type: ARMv5InstructionType::Undefined
     };
 
-    fn data_and_miscellaneos(inst_bits: u32) -> ARMv5Instruction {
+    fn data_and_miscellaneous(inst_bits: u32) -> ARMv5Instruction {
         let op: bool = inst_bits.get_bit(25);
         let op1: u32 = inst_bits.cut_bits(20..=24);
         let op2: u32 = inst_bits.cut_bits(4..=7);
@@ -62,7 +62,7 @@ impl ARMv5Decoder {
                 }
             }
             else if bm(op2, 0b1000, 0b0000) {
-                return ARMv5Decoder::miscellaneos(inst_bits);
+                return ARMv5Decoder::miscellaneous(inst_bits);
             }
 
             if bm(op2, 0b1111, 0b1001) {
@@ -114,7 +114,7 @@ impl ARMv5Decoder {
         }
     }
 
-    fn miscellaneos(inst_bits: u32) -> ARMv5Instruction {
+    fn miscellaneous(inst_bits: u32) -> ARMv5Instruction {
         let op: u32 = inst_bits.cut_bits(21..=22);
         let op2: u32 = inst_bits.cut_bits(4..=6);
         
@@ -893,7 +893,7 @@ mod tests {
                 }
             }
         ),
-        //found misstake decoding register/offset
+        //found mistake decoding register/offset
         ldrh: (
             0xe1d5c0b0,
             ARMv5Instruction {
@@ -911,7 +911,7 @@ mod tests {
                 }
             }
         ),
-        //found misstake, wrong calc order
+        //found mistake, wrong calc order
         ldrsb: (
             0x51db78d1,
             ARMv5Instruction {
