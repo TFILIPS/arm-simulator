@@ -3,14 +3,14 @@
 #![allow(clippy::upper_case_acronyms)]
 
 use std::collections::HashSet;
-use wasm_bindgen::prelude::*;
 
 use elf_loader::ELFFile;
-use simulated_cpu::{names::ARMv5FlagNames, ARMv5CPU, CpuEvent, SimulatedCPU};
+use simulated_cpu::{ARMv5CPU, CpuEvent, SimulatedCPU};
 use utils::Memory;
 pub use elf_loader::ElfError;
 pub use simulated_cpu::{
-    SimulationException, SimulationExceptionKind, UnsupportedReason, names::ARMv5RegNames
+    SimulationException, SimulationExceptionKind, UnsupportedReason, 
+    names::{ARMv5RegNames, ARMv5FlagNames}
 };
 pub use utils::MemoryError;
 
@@ -18,6 +18,7 @@ mod elf_loader;
 mod os;
 mod simulated_cpu;
 mod utils;
+mod wasm;
 
 const DEFAULT_STACK_POINTER: u32 = 0x40000;
 
@@ -28,7 +29,6 @@ pub enum SimulationEvent {
     ConsoleOutput{stream: i32, message: Vec<u8>}
 }
 
-#[wasm_bindgen]
 pub struct ARMSimulator {
     elf_file: Option<ELFFile>,
     simulated_cpu: ARMv5CPU,
@@ -120,16 +120,7 @@ impl ARMSimulator {
     pub fn get_flags(&self) -> Vec<bool> {
         Vec::from(self.simulated_cpu.get_flags())
     }
-}
 
-impl Default for ARMSimulator {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-#[wasm_bindgen]
-impl ARMSimulator {
     pub fn get_register(&self, register: ARMv5RegNames) -> i32 {
         self.simulated_cpu.get_register(register)
     }
@@ -183,15 +174,9 @@ impl ARMSimulator {
     }
 }
 
-// Errors returned to JavaScript become JS Error objects
-impl From<ElfError> for JsValue {
-    fn from(error: ElfError) -> Self {
-        JsError::new(&error.to_string()).into()
-    }
-}
-impl From<MemoryError> for JsValue {
-    fn from(error: MemoryError) -> Self {
-        JsError::new(&error.to_string()).into()
+impl Default for ARMSimulator {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
