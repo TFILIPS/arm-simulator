@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 use wasm_bindgen::prelude::*;
 
 use elf_loader::ELFFile;
@@ -16,14 +16,18 @@ const DEFAULT_STACK_POINTER: u32 = 0x40000;
 pub struct ARMSimulator {
     elf_file: Option<ELFFile>,
     simulated_cpu: ARMv5CPU,
-    dynamic_breakpoints: HashMap<u32, bool>,
+    dynamic_breakpoints: HashSet<u32>,
+    // Breakpoint the last run stopped at. Resuming from it must not stop
+    // again right away. Executing any instruction clears it.
+    stopped_at_breakpoint: Option<u32>
 }
 impl ARMSimulator {
     pub fn new() -> ARMSimulator {
         ARMSimulator { 
             elf_file: None,
             simulated_cpu: ARMv5CPU::new(), 
-            dynamic_breakpoints: HashMap::new() 
+            dynamic_breakpoints: HashSet::new(),
+            stopped_at_breakpoint: None
         }
     }
  
@@ -37,24 +41,28 @@ impl ARMSimulator {
         elf.load_into_memory(&mut self.simulated_cpu)?;
 
         self.elf_file = Some(elf);
+        self.stopped_at_breakpoint = None;
         Ok(())
     }
 
 
     pub fn step(&mut self) -> Result<SimulationEvent, SimulationException> {
+        self.stopped_at_breakpoint = None;
         self.simulated_cpu.step()
     }
 
     pub fn multiple_steps(&mut self, n: usize) -> Result<SimulationEvent, SimulationException> { 
         for _ in 0..n {
-            if self.hit_active_breakpoint() {
+            let address: u32 = self.get_program_counter();
+            if self.dynamic_breakpoints.contains(&address) 
+                && self.stopped_at_breakpoint != Some(address) {
+                self.stopped_at_breakpoint = Some(address);
                 return Ok(SimulationEvent::Breakpoint);
             }
 
-            let result = self.simulated_cpu.step();
-            match result {
-                Ok(SimulationEvent::None) => continue,
-                _ => return result
+            match self.step()? {
+                SimulationEvent::None => continue,
+                event => return Ok(event)
             };
         }
         Ok(SimulationEvent::None)
@@ -117,19 +125,16 @@ impl ARMSimulator {
     }
 
     pub fn add_breakpoint(&mut self, address: u32) {
-        if !self.dynamic_breakpoints.contains_key(&address) {
-            self.dynamic_breakpoints.insert(address, true);
-        }  
+        self.dynamic_breakpoints.insert(address);
     }
 
     pub fn remove_breakpoint(&mut self, address: u32) {
-        if self.dynamic_breakpoints.contains_key(&address) {
-            self.dynamic_breakpoints.remove(&address);
-        }
+        self.dynamic_breakpoints.remove(&address);
     }
 
     pub fn reload_simulator(&mut self) -> Result<(), String> {  
         self.simulated_cpu.reset();
+        self.stopped_at_breakpoint = None;
         self.simulated_cpu.set_register(ARMv5RegNames::SP, DEFAULT_STACK_POINTER as i32);
         if let Some(elf) = &self.elf_file {
             self.simulated_cpu.set_encoding(elf.get_encoding());
@@ -140,18 +145,92 @@ impl ARMSimulator {
     }
 }
 
-impl ARMSimulator {
-    fn hit_active_breakpoint(&mut self) -> bool {
-        let address: u32 = self.simulated_cpu.get_register(ARMv5RegNames::PC) as u32;
-        if let Some(active) = self.dynamic_breakpoints.get(&address) {
-            if *active {
-                self.dynamic_breakpoints.insert(address, false);
-                return true;
-            }
-            else {
-                self.dynamic_breakpoints.insert(address, true);
+#[cfg(test)]
+mod tests {
+    use crate::{ARMSimulator, ARMv5RegNames, SimulationEvent};
+
+    // 0x1000: mov r0, r0
+    // 0x1004: mov r0, r0   <- breakpoint
+    // 0x1008: b 0x1000
+    fn loop_with_breakpoint() -> ARMSimulator {
+        let program: [u32; 3] = [0xE1A0_0000, 0xE1A0_0000, 0xEAFF_FFFC];
+        let bytes: Vec<u8> = program.iter().flat_map(|i| i.to_le_bytes()).collect();
+
+        let mut sim = ARMSimulator::new();
+        sim.set_memory(0x1000, &bytes).unwrap();
+        sim.set_register(ARMv5RegNames::PC, 0x1000);
+        sim.add_breakpoint(0x1004);
+        sim
+    }
+
+    // Runs in chunks of one instruction, like a UI would with larger chunks
+    fn instructions_until_breakpoint(sim: &mut ARMSimulator) -> usize {
+        for executed in 0..100 {
+            if let SimulationEvent::Breakpoint = sim.multiple_steps(1).unwrap() {
+                return executed;
             }
         }
-        false
+        panic!("Breakpoint was never hit!");
+    }
+
+    #[test]
+    fn continue_from_breakpoint_stops_on_next_hit() {
+        let mut sim = loop_with_breakpoint();
+        assert_eq!(1, instructions_until_breakpoint(&mut sim));
+        assert_eq!(3, instructions_until_breakpoint(&mut sim));
+        assert_eq!(0x1004, sim.get_program_counter());
+    }
+
+    #[test]
+    fn single_step_from_breakpoint_keeps_it_active() {
+        let mut sim = loop_with_breakpoint();
+        instructions_until_breakpoint(&mut sim);
+        sim.step().unwrap();
+        assert_eq!(2, instructions_until_breakpoint(&mut sim));
+    }
+
+    #[test]
+    fn moving_pc_after_breakpoint_keeps_it_active() {
+        let mut sim = loop_with_breakpoint();
+        instructions_until_breakpoint(&mut sim);
+        sim.set_register(ARMv5RegNames::PC, 0x1000);
+        assert_eq!(1, instructions_until_breakpoint(&mut sim));
+    }
+
+    #[test]
+    fn chunk_ending_on_breakpoint_stops_in_next_chunk() {
+        let mut sim = loop_with_breakpoint();
+        assert!(matches!(sim.multiple_steps(1).unwrap(), SimulationEvent::None));
+        assert!(matches!(sim.multiple_steps(100).unwrap(), SimulationEvent::Breakpoint));
+        assert_eq!(0x1004, sim.get_program_counter());
+    }
+
+    #[test]
+    fn output_landing_on_breakpoint_stops_afterwards() {
+        // 0x1000: svc #0 (write 1 byte to stdout)
+        // 0x1004: mov r0, r0   <- breakpoint
+        let mut sim = loop_with_breakpoint();
+        sim.set_memory(0x1000, &0xEF00_0000u32.to_le_bytes()).unwrap();
+        sim.set_register(ARMv5RegNames::R7, 4);
+        sim.set_register(ARMv5RegNames::R0, 1);
+        sim.set_register(ARMv5RegNames::R1, 0x2000);
+        sim.set_register(ARMv5RegNames::R2, 1);
+
+        assert!(matches!(sim.multiple_steps(100).unwrap(), SimulationEvent::ConsoleOutput { .. }));
+        assert!(matches!(sim.multiple_steps(100).unwrap(), SimulationEvent::Breakpoint));
+        assert_eq!(0x1004, sim.get_program_counter());
+    }
+
+    #[test]
+    fn reload_while_stopped_at_breakpoint_keeps_it_active() {
+        let mut sim = ARMSimulator::new();
+        sim.load_elf_file("./sample_programs/hallo").unwrap();
+        let entry_point: u32 = sim.get_program_counter();
+        sim.add_breakpoint(entry_point);
+
+        assert_eq!(0, instructions_until_breakpoint(&mut sim));
+        sim.reload_simulator().unwrap();
+        assert_eq!(0, instructions_until_breakpoint(&mut sim));
+        assert_eq!(entry_point, sim.get_program_counter());
     }
 }
