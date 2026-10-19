@@ -119,7 +119,7 @@ pub enum ARMv5SynchronizationOperation {
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ARMv5GenericOperation {
-    BKPT, MRS, MSR, CDP, CDP2, LDC, 
+    MRS, MSR, CDP, CDP2, LDC, 
     LDC2, MCR, MCR2, MRC, MRC2, STC, STC2
 }
 
@@ -151,6 +151,9 @@ pub enum ARMv5InstructionType {
         rd:ARMv5RegNames, rm: ARMv5RegNames
     },
     SoftwareInterrupt {
+        immediate: u32
+    },
+    Breakpoint {
         immediate: u32
     },
     Generic { 
@@ -249,9 +252,9 @@ impl Instruction<ARMv5CPU> for ARMv5Instruction {
                 function(cpu, *rn, *rd, *rm)
             },
             ARMv5InstructionType::SoftwareInterrupt { immediate } => cpu.swi(*immediate),
+            ARMv5InstructionType::Breakpoint { .. } => cpu.bkpt(),
             ARMv5InstructionType::Generic { op } => {
                 let function = match op {
-                    ARMv5GenericOperation::BKPT => ARMv5CPU::bkpt,
                     ARMv5GenericOperation::MRS => ARMv5CPU::mrs,
                     ARMv5GenericOperation::MSR => ARMv5CPU::msr,
                     ARMv5GenericOperation::CDP => ARMv5CPU::cdp,
@@ -337,8 +340,11 @@ impl Display for ARMv5Instruction {
             ARMv5InstructionType::SoftwareInterrupt { immediate } => {
                 write!(f, "SWI{cond} #{immediate}")
             },
+            ARMv5InstructionType::Breakpoint { immediate } => {
+                write!(f, "BKPT{cond} #{immediate}")
+            },
             ARMv5InstructionType::Generic { op } => {
-                write!(f, "{:?} #0", op)
+                write!(f, "{:?}{cond}", op)
             }
             ARMv5InstructionType::Undefined => write!(f, "?")
         }
@@ -1035,7 +1041,7 @@ impl ARMv5CPU {
         Ok(CpuEvent::SoftwareInterrupt { immediate })
     }
 
-    fn bkpt(&mut self) -> Result<CpuEvent, SimulationExceptionKind> { 
+    fn bkpt(&self) -> Result<CpuEvent, SimulationExceptionKind> { 
         Ok(CpuEvent::Breakpoint) 
     }
 
@@ -1910,6 +1916,21 @@ mod tests {
     fn swi_disassembly() {
         assert_eq!("SWIEQ #42", ARMv5Decoder::decode(0x0F00_002A).to_string());
         assert_eq!("SWI #0", ARMv5Decoder::decode(0xEF00_0000).to_string());
+    }
+
+    #[test]
+    fn bkpt_is_breakpoint() {
+        let mut cpu = ARMv5CPU::new();
+        let instruction: ARMv5Instruction = ARMv5Decoder::decode(0xE12A_5373);
+
+        assert_eq!(Ok(CpuEvent::Breakpoint), instruction.execute(&mut cpu));
+    }
+
+    #[test]
+    fn bkpt_and_unsupported_instructions_disassembly() {
+        assert_eq!("BKPT #42291", ARMv5Decoder::decode(0xE12A_5373).to_string());
+        assert_eq!("MRS", ARMv5Decoder::decode(0xE10F_3000).to_string());
+        assert_eq!("MCRLS", ARMv5Decoder::decode(0x9EE2_C610).to_string());
     }
 
     #[test]

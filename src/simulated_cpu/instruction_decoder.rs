@@ -136,9 +136,9 @@ impl ARMv5Decoder {
             (0b011, 0b01) => ARMv5InstructionType::Branch {
                 op: ARMv5BranchOperation::BLX, bo: BranchOperator::Register(rm)
             },
-            (0b111, 0b01) => ARMv5InstructionType::Generic {
-                op: ARMv5GenericOperation::BKPT
-            },        
+            (0b111, 0b01) => ARMv5InstructionType::Breakpoint {
+                immediate: (inst_bits.cut_bits(8..=19) << 4) | inst_bits.cut_bits(0..=3)
+            },
             _ => return ARMv5Decoder::UNDEFINED_INSTRUCTION
         };
 
@@ -1151,8 +1151,8 @@ mod tests {
             0xe12a5373,
             ARMv5Instruction {
                 condition: Condition::AL,
-                instruction_type: ARMv5InstructionType::Generic { 
-                    op: ARMv5GenericOperation::BKPT
+                instruction_type: ARMv5InstructionType::Breakpoint { 
+                    immediate: 0xA533
                 }
             }
         ),
