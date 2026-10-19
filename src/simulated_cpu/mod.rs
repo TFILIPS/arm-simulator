@@ -17,7 +17,7 @@ pub trait SimulatedCPU {
     type RegNames;
     type FlagNames;
 
-    fn step(&mut self) -> Result<SimulationEvent, SimulationException>;
+    fn step(&mut self) -> Result<CpuEvent, SimulationException>;
     fn disassemble_memory(&self, start: u32, end: u32, labels: Vec<(u32, String)>) -> String;
     fn get_register(&self, register: Self::RegNames) -> Self::RegType;
     fn set_register(&mut self, register: Self::RegNames, value: Self::RegType);
@@ -28,11 +28,11 @@ pub trait SimulatedCPU {
     fn set_encoding(&mut self, encoding: Endian);
 }
 
-pub enum SimulationEvent {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CpuEvent {
     None,
     Breakpoint,
-    Exit{exit_code: i32},
-    ConsoleOutput{stream: i32, message: Vec<u8>}
+    SoftwareInterrupt{immediate: u32}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -97,12 +97,12 @@ impl SimulatedCPU for ARMv5CPU {
     type RegNames = ARMv5RegNames;
     type FlagNames = ARMv5FlagNames;
 
-    fn step(&mut self) -> Result<SimulationEvent, SimulationException> {
+    fn step(&mut self) -> Result<CpuEvent, SimulationException> {
         let address: u32 = self.registers[ARMv5RegNames::PC] as u32;
         self.next_pc = address.wrapping_add(4);
 
         // On an exception the PC stays at the faulting instruction
-        let result: SimulationEvent = self.load_and_execute_instruction(address)?;
+        let result: CpuEvent = self.load_and_execute_instruction(address)?;
 
         self.registers[ARMv5RegNames::PC] = self.next_pc as i32;
         Ok(result)
@@ -240,7 +240,7 @@ impl ARMv5CPU {
 
     fn load_and_execute_instruction(
         &mut self, address: u32
-    ) -> Result<SimulationEvent, SimulationException>{
+    ) -> Result<CpuEvent, SimulationException>{
         let bits: u32 = match self.get_memory(address, 4) {
             Ok(bytes) => slice_to_u32(bytes, &self.encoding),
             Err(_) => return Err(SimulationException { 
@@ -271,7 +271,7 @@ impl ARMv5CPU {
 mod tests {
     use crate::utils::{Memory, MemoryError};
     use super::{
-        SimulatedCPU, ARMv5CPU, SimulationException, SimulationExceptionKind,
+        SimulatedCPU, ARMv5CPU, CpuEvent, SimulationException, SimulationExceptionKind,
         names::ARMv5RegNames
     };
 
@@ -331,6 +331,17 @@ mod tests {
         memory_word_crossing_end: (0x3FF_FFFE, 4, false),
         memory_one_past_end: (0x400_0000, 1, false),
         memory_empty_at_end: (0x400_0000, 0, true)
+    }
+
+    #[test]
+    fn step_software_interrupt() {
+        // swi #0x900004
+        let mut cpu = ARMv5CPU::new();
+        cpu.set_memory(0x1000, &0xEF90_0004u32.to_le_bytes()).unwrap();
+        cpu.set_register(ARMv5RegNames::PC, 0x1000);
+
+        assert_eq!(Some(CpuEvent::SoftwareInterrupt { immediate: 0x90_0004 }), cpu.step().ok());
+        assert_eq!(0x1004, cpu.get_register(ARMv5RegNames::PC));
     }
 
     #[test]

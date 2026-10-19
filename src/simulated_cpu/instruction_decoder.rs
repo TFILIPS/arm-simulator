@@ -322,10 +322,16 @@ impl ARMv5Decoder {
     fn coprocessor_and_swi(inst_bits: u32) -> ARMv5Instruction {
         let op1: u32 = inst_bits.cut_bits(20..=25);
 
-        let op: ARMv5GenericOperation = if bm(op1, 0b110000, 0b110000) {
-            ARMv5GenericOperation::SWI 
+        if bm(op1, 0b110000, 0b110000) {
+            return ARMv5Instruction {
+                condition: Condition::from_instruction(inst_bits),
+                instruction_type: ARMv5InstructionType::SoftwareInterrupt {
+                    immediate: inst_bits.cut_bits(0..=23)
+                }
+            };
         }
-        else if !bm(inst_bits.cut_bits(8..=11), 0b1110, 0x1010) {
+
+        let op: ARMv5GenericOperation = if !bm(inst_bits.cut_bits(8..=11), 0b1110, 0x1010) {
             if bm(op1, 0b100001, 0b0) && !bm(op1, 0b111011, 0b0) {
                 ARMv5GenericOperation::STC
             }
@@ -1137,8 +1143,8 @@ mod tests {
             0x1fdf055e,
             ARMv5Instruction {
                 condition: Condition::NE,
-                instruction_type: ARMv5InstructionType::Generic { 
-                    op: ARMv5GenericOperation::SWI
+                instruction_type: ARMv5InstructionType::SoftwareInterrupt { 
+                    immediate: 0xDF_055E
                 }
             }
         ),

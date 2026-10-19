@@ -4,19 +4,27 @@ use std::collections::HashSet;
 use wasm_bindgen::prelude::*;
 
 use elf_loader::ELFFile;
-use simulated_cpu::{names::ARMv5FlagNames, ARMv5CPU, SimulatedCPU};
+use simulated_cpu::{names::ARMv5FlagNames, ARMv5CPU, CpuEvent, SimulatedCPU};
 use utils::Memory;
 pub use elf_loader::ElfError;
 pub use simulated_cpu::{
-    SimulationEvent, SimulationException, SimulationExceptionKind, names::ARMv5RegNames
+    SimulationException, SimulationExceptionKind, names::ARMv5RegNames
 };
 pub use utils::MemoryError;
 
 mod elf_loader;
+mod os;
 mod simulated_cpu;
 mod utils;
 
 const DEFAULT_STACK_POINTER: u32 = 0x40000;
+
+pub enum SimulationEvent {
+    None,
+    Breakpoint,
+    Exit{exit_code: i32},
+    ConsoleOutput{stream: i32, message: Vec<u8>}
+}
 
 #[wasm_bindgen]
 pub struct ARMSimulator {
@@ -56,7 +64,19 @@ impl ARMSimulator {
 
     pub fn step(&mut self) -> Result<SimulationEvent, SimulationException> {
         self.stopped_at_breakpoint = None;
-        self.simulated_cpu.step()
+        let address: u32 = self.get_program_counter();
+
+        match self.simulated_cpu.step()? {
+            CpuEvent::None => Ok(SimulationEvent::None),
+            CpuEvent::Breakpoint => Ok(SimulationEvent::Breakpoint),
+            CpuEvent::SoftwareInterrupt { .. } => {
+                os::handle_syscall(&mut self.simulated_cpu).map_err(|kind| {
+                    // Like for other exceptions the PC stays at the instruction
+                    self.simulated_cpu.set_register(ARMv5RegNames::PC, address as i32);
+                    SimulationException { address, kind }
+                })
+            }
+        }
     }
 
     pub fn multiple_steps(&mut self, n: usize) -> Result<SimulationEvent, SimulationException> { 
@@ -171,7 +191,7 @@ impl From<MemoryError> for JsValue {
 mod tests {
     use crate::{
         ARMSimulator, ARMv5RegNames, ARMv5FlagNames, ElfError, SimulationEvent, 
-        DEFAULT_STACK_POINTER
+        SimulationException, SimulationExceptionKind, DEFAULT_STACK_POINTER
     };
 
     // 32-bit little endian ARM executable
@@ -294,6 +314,27 @@ mod tests {
         expected_registers[15] = entry_point as i32;
         assert_eq!(expected_registers, sim.get_registers());
         assert_eq!(program, sim.get_memory(entry_point, 36).unwrap());
+    }
+
+    #[test]
+    fn failing_system_call_keeps_pc_at_swi() {
+        // swi #0 with write(1, 0xFFFF_FF00, 0x200)
+        let mut sim = ARMSimulator::new();
+        sim.set_memory(0x1000, &0xEF00_0000u32.to_le_bytes()).unwrap();
+        sim.set_register(ARMv5RegNames::PC, 0x1000);
+        sim.set_register(ARMv5RegNames::R7, 4);
+        sim.set_register(ARMv5RegNames::R0, 1);
+        sim.set_register(ARMv5RegNames::R1, 0xFFFF_FF00u32 as i32);
+        sim.set_register(ARMv5RegNames::R2, 0x200);
+
+        assert_eq!(
+            Some(SimulationException { 
+                address: 0x1000, 
+                kind: SimulationExceptionKind::DataAbort { memory_address: 0xFFFF_FF00, size: 0x200 } 
+            }),
+            sim.step().err()
+        );
+        assert_eq!(0x1000, sim.get_program_counter());
     }
 
     #[test]

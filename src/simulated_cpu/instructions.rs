@@ -6,7 +6,7 @@ use super::{
         ShifterOperand, AddressingMode, 
         AddressingModeMultiple, BranchOperator
     }, 
-    SimulationExceptionKind, SimulationEvent
+    SimulationExceptionKind, CpuEvent
 };
 use crate::utils::{
     slice_to_u32, BitAccess, slice_to_u16, u32_to_array, u16_to_array, Memory,
@@ -14,7 +14,7 @@ use crate::utils::{
 };
 
 pub trait Instruction<C: SimulatedCPU>: Display {
-    fn execute(&self, cpu: &mut C) -> Result<SimulationEvent, SimulationExceptionKind>;
+    fn execute(&self, cpu: &mut C) -> Result<CpuEvent, SimulationExceptionKind>;
 }
 
 // Todo: Remove Clone and Copy from all enums where its possible and rent values
@@ -121,7 +121,7 @@ pub enum ARMv5SynchronizationOperation {
 #[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ARMv5GenericOperation {
-    SWI, BKPT, MRS, MSR, CDP, CDP2, LDC, 
+    BKPT, MRS, MSR, CDP, CDP2, LDC, 
     LDC2, MCR, MCR2, MRC, MRC2, STC, STC2
 }
 
@@ -152,6 +152,9 @@ pub enum ARMv5InstructionType {
         op: ARMv5SynchronizationOperation, rn: ARMv5RegNames, 
         rd:ARMv5RegNames, rm: ARMv5RegNames
     },
+    SoftwareInterrupt {
+        immediate: u32
+    },
     Generic { 
         op: ARMv5GenericOperation },
     Undefined
@@ -164,9 +167,9 @@ pub struct ARMv5Instruction {
     pub instruction_type: ARMv5InstructionType
 }
 impl Instruction<ARMv5CPU> for ARMv5Instruction {
-    fn execute(&self, cpu: &mut ARMv5CPU) -> Result<SimulationEvent, SimulationExceptionKind> {
+    fn execute(&self, cpu: &mut ARMv5CPU) -> Result<CpuEvent, SimulationExceptionKind> {
         if !self.condition.is_satisfied(&cpu.flags) { 
-            return Ok(SimulationEvent::None); 
+            return Ok(CpuEvent::None); 
         }
 
         match &self.instruction_type {
@@ -247,9 +250,9 @@ impl Instruction<ARMv5CPU> for ARMv5Instruction {
                 };
                 function(cpu, *rn, *rd, *rm)
             },
+            ARMv5InstructionType::SoftwareInterrupt { immediate } => cpu.swi(*immediate),
             ARMv5InstructionType::Generic { op } => {
                 let function = match op {
-                    ARMv5GenericOperation::SWI => ARMv5CPU::swi,
                     ARMv5GenericOperation::BKPT => ARMv5CPU::bkpt,
                     ARMv5GenericOperation::MRS => ARMv5CPU::mrs,
                     ARMv5GenericOperation::MSR => ARMv5CPU::msr,
@@ -333,6 +336,9 @@ impl Display for ARMv5Instruction {
             ARMv5InstructionType::Synchronization { op, rn, rd, rm } => {
                 write!(f, "{:?}{cond} {rd} {rm} {rn}", op)
             },
+            ARMv5InstructionType::SoftwareInterrupt { immediate } => {
+                write!(f, "SWI{cond} #{immediate}")
+            },
             ARMv5InstructionType::Generic { op } => {
                 write!(f, "{:?} #0", op)
             }
@@ -344,7 +350,7 @@ impl Display for ARMv5Instruction {
 impl ARMv5CPU {
     fn and(
         &mut self, s: bool, rn: ARMv5RegNames, rd: ARMv5RegNames, so: ShifterOperand
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: i32 = self.get_register_intern(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
 
@@ -357,12 +363,12 @@ impl ARMv5CPU {
             self.flags[ARMv5FlagNames::C] = carry;
         }
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn eor(
         &mut self, s: bool, rn: ARMv5RegNames, rd: ARMv5RegNames, so: ShifterOperand
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: i32 = self.get_register_intern(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
 
@@ -375,12 +381,12 @@ impl ARMv5CPU {
             self.flags[ARMv5FlagNames::C] = carry;
         }
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn sub(
         &mut self, s: bool, rn: ARMv5RegNames, rd: ARMv5RegNames, so: ShifterOperand
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
@@ -394,12 +400,12 @@ impl ARMv5CPU {
             self.flags[ARMv5FlagNames::V] = overflow;
         }
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn rsb(
         &mut self, s: bool, rn: ARMv5RegNames, rd: ARMv5RegNames, so: ShifterOperand
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
@@ -413,12 +419,12 @@ impl ARMv5CPU {
             self.flags[ARMv5FlagNames::V] = overflow;
         }
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn add(
         &mut self, s: bool, rn: ARMv5RegNames, rd: ARMv5RegNames, so: ShifterOperand
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
@@ -432,13 +438,13 @@ impl ARMv5CPU {
             self.flags[ARMv5FlagNames::V] = overflow;
         }
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
 
     fn adc(
         &mut self, s: bool, rn: ARMv5RegNames, rd: ARMv5RegNames, so: ShifterOperand
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
         let c: i32 = if self.flags[ARMv5FlagNames::C] {1} else {0};
@@ -456,12 +462,12 @@ impl ARMv5CPU {
             self.flags[ARMv5FlagNames::V] = o1 || o2;
         }
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn sbc(
         &mut self, s: bool, rn: ARMv5RegNames, rd: ARMv5RegNames, so: ShifterOperand
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
         let c: i32 = if self.flags[ARMv5FlagNames::C] {0} else {1};
@@ -477,12 +483,12 @@ impl ARMv5CPU {
             self.flags[ARMv5FlagNames::V] = o1 || o2;
         }
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn rsc(
         &mut self, s: bool, rn: ARMv5RegNames, rd: ARMv5RegNames, so: ShifterOperand
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
         let c: i32 = if self.flags[ARMv5FlagNames::C] {0} else {1};
@@ -498,12 +504,12 @@ impl ARMv5CPU {
             self.flags[ARMv5FlagNames::V] = o1 || o2;
         }
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn tst(
         &mut self, _: bool, rn: ARMv5RegNames, _: ARMv5RegNames, so: ShifterOperand
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: i32 = self.get_register_intern(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
 
@@ -513,12 +519,12 @@ impl ARMv5CPU {
         self.flags[ARMv5FlagNames::Z] = result == 0;
         self.flags[ARMv5FlagNames::C] = carry;
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn teq(
         &mut self, _: bool, rn: ARMv5RegNames, _: ARMv5RegNames, so: ShifterOperand
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: i32 = self.get_register_intern(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
 
@@ -528,12 +534,12 @@ impl ARMv5CPU {
         self.flags[ARMv5FlagNames::Z] = result == 0;
         self.flags[ARMv5FlagNames::C] = carry;
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn cmp(
         &mut self, _: bool, rn: ARMv5RegNames, _: ARMv5RegNames, so: ShifterOperand
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
@@ -545,12 +551,12 @@ impl ARMv5CPU {
         self.flags[ARMv5FlagNames::C] = (result as u32) <= (a as u32);
         self.flags[ARMv5FlagNames::V] = overflow;
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn cmn(
         &mut self, _: bool, rn: ARMv5RegNames, _: ARMv5RegNames, so: ShifterOperand
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: i32 = self.get_register_intern(rn);
         let (b, _): (i32, bool) = self.perform_shift(so);
 
@@ -561,12 +567,12 @@ impl ARMv5CPU {
         self.flags[ARMv5FlagNames::C] = (result as u32) < (a as u32);
         self.flags[ARMv5FlagNames::V] = overflow;
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn orr(
         &mut self, s: bool, rn: ARMv5RegNames, rd: ARMv5RegNames, so: ShifterOperand
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: i32 = self.get_register_intern(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
 
@@ -579,12 +585,12 @@ impl ARMv5CPU {
             self.flags[ARMv5FlagNames::C] = carry;
         }
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn mov(
         &mut self, s: bool, _: ARMv5RegNames, rd: ARMv5RegNames, so: ShifterOperand
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let (value, carry): (i32, bool) = self.perform_shift(so);
         self.set_register_intern(rd, value);
 
@@ -594,12 +600,12 @@ impl ARMv5CPU {
             self.flags[ARMv5FlagNames::C] = carry;
         }
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn bic(
         &mut self, s: bool, rn: ARMv5RegNames, rd: ARMv5RegNames, so: ShifterOperand
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: i32 = self.get_register_intern(rn);
         let (b, carry): (i32, bool) = self.perform_shift(so);
 
@@ -612,12 +618,12 @@ impl ARMv5CPU {
             self.flags[ARMv5FlagNames::C] = carry;
         }
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn mvn(
         &mut self, s: bool, _: ARMv5RegNames, rd: ARMv5RegNames, so: ShifterOperand
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let (value, carry): (i32, bool) = self.perform_shift(so);
         let result: i32 = !value;
         self.set_register_intern(rd, result);
@@ -628,7 +634,7 @@ impl ARMv5CPU {
             self.flags[ARMv5FlagNames::C] = carry;
         }
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
 
@@ -636,7 +642,7 @@ impl ARMv5CPU {
     fn mul(
         &mut self, s: bool, rd: ARMv5RegNames, _: ARMv5RegNames,
         rs: ARMv5RegNames, rm: ARMv5RegNames 
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: i32 = self.get_register_intern(rm);
         let b: i32 = self.get_register_intern(rs);
 
@@ -648,13 +654,13 @@ impl ARMv5CPU {
             self.flags[ARMv5FlagNames::Z] = result == 0;
         }
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn mla(
         &mut self, s: bool, rd: ARMv5RegNames, rn: ARMv5RegNames, 
         rs: ARMv5RegNames, rm: ARMv5RegNames 
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: i32 = self.get_register_intern(rm);
         let b: i32 = self.get_register_intern(rs);
         let c: i32 = self.get_register_intern(rn);
@@ -667,13 +673,13 @@ impl ARMv5CPU {
             self.flags[ARMv5FlagNames::Z] = result == 0;
         }
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn smull(
         &mut self, s: bool, rdhi: ARMv5RegNames, rdlo: ARMv5RegNames,
         rs: ARMv5RegNames, rm: ARMv5RegNames
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: i64 = self.get_register_intern(rm) as i64;
         let b: i64 = self.get_register_intern(rs) as i64;
 
@@ -686,13 +692,13 @@ impl ARMv5CPU {
             self.flags[ARMv5FlagNames::Z] = result == 0;
         }
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn umull(        
         &mut self, s: bool, rdhi: ARMv5RegNames, rdlo: ARMv5RegNames,
         rs: ARMv5RegNames, rm: ARMv5RegNames
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: u64 = self.get_register_intern(rm) as u32 as u64;
         let b: u64 = self.get_register_intern(rs) as u32 as u64;
 
@@ -706,13 +712,13 @@ impl ARMv5CPU {
             self.flags[ARMv5FlagNames::Z] = result == 0;
         }
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn smlal(
         &mut self, s: bool, rdhi: ARMv5RegNames, rdlo: ARMv5RegNames,
         rs: ARMv5RegNames, rm: ARMv5RegNames
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: i64 = self.get_register_intern(rm) as i64;
         let b: i64 = self.get_register_intern(rs) as i64;
         let c: i64 = (self.get_register_intern(rdlo) as i64) 
@@ -727,13 +733,13 @@ impl ARMv5CPU {
             self.flags[ARMv5FlagNames::Z] = result == 0;
         }
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn umlal(
         &mut self, s: bool, rdhi: ARMv5RegNames, rdlo: ARMv5RegNames,
         rs: ARMv5RegNames, rm: ARMv5RegNames
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: u64 = self.get_register_intern(rm) as u32 as u64;
         let b: u64 = self.get_register_intern(rs) as u32 as u64;
         let c: i64 = (self.get_register_intern(rdlo) as i64) 
@@ -748,27 +754,27 @@ impl ARMv5CPU {
             self.flags[ARMv5FlagNames::Z] = result == 0;
         }
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
 
     // Miscellaneous arithmetic instructions
     fn clz(
         &mut self, rd: ARMv5RegNames, rm: ARMv5RegNames
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let a: i32 = self.get_register_intern(rm);
 
         let result: i32 = a.leading_zeros() as i32;
         self.set_register_intern(rd, result);
         
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
     
 
     // Branch instructions
     fn b(
         &mut self, l: bool, bo: &BranchOperator
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let prog_addr: i32 = self.get_register_intern(ARMv5RegNames::PC);
 
         if l {
@@ -786,12 +792,12 @@ impl ARMv5CPU {
             }
         };
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn bx(
         &mut self, l: bool, bo: &BranchOperator
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let prog_addr: i32 = self.get_register_intern(ARMv5RegNames::PC);
         // This behavior is incorrect! After switching to 
         // Thumb state on a non T CPU the next executed instruction
@@ -818,14 +824,14 @@ impl ARMv5CPU {
             }
         };
 
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
 
     // Load and store instructions
     fn ldr(
         &mut self, rd: ARMv5RegNames, am: AddressingMode
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let mut address: u32 = self.compute_modify_address(am);
 
         // do this only if unaligned access flag is 0 (maybe only in ARMv6 but need to check)
@@ -842,62 +848,62 @@ impl ARMv5CPU {
             //set T bit when LSB is 1
         }
         self.set_register_intern(rd, value as i32);
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn ldrb(
         &mut self, rd: ARMv5RegNames, am: AddressingMode
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let address: u32 = self.compute_modify_address(am);
         let value: u32 = self.get_memory(address, 1)?[0] as u32;
         self.set_register_intern(rd, value as i32);
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn ldrbt(
         &mut self, rd: ARMv5RegNames, am: AddressingMode
-    ) -> Result<SimulationEvent, SimulationExceptionKind> { 
+    ) -> Result<CpuEvent, SimulationExceptionKind> { 
         self.ldrb(rd, am)
     }
 
     fn ldrh(
         &mut self, rd: ARMv5RegNames, am: AddressingMode
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let address: u32 = self.compute_modify_address(am);
         let bytes: &[u8] = self.get_memory(address, 2)?; //&self.memory[address..address+2];
         let value: u32 = slice_to_u16(bytes, &self.encoding) as u32;
         self.set_register_intern(rd, value as i32);
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn ldrsb(
         &mut self, rd: ARMv5RegNames, am: AddressingMode
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let address: u32 = self.compute_modify_address(am);
         let value: i32 = self.get_memory(address, 1)?[0] as i8 as i32;
         self.set_register_intern(rd, value);
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn ldrsh(
         &mut self, rd: ARMv5RegNames, am: AddressingMode
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let address: u32 = self.compute_modify_address(am);
         let bytes: &[u8] = self.get_memory(address, 2)?;//&self.memory[address..address+2];
         let value: i32 = slice_to_u16(bytes, &self.encoding) as i16 as i32;
         self.set_register_intern(rd, value);
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn ldrt(
         &mut self, rd: ARMv5RegNames, am: AddressingMode
-    ) -> Result<SimulationEvent, SimulationExceptionKind> { 
+    ) -> Result<CpuEvent, SimulationExceptionKind> { 
         self.ldr(rd, am)
     }
 
     fn str(
         &mut self, rd: ARMv5RegNames, am: AddressingMode
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let mut address: u32 = self.compute_modify_address(am);
         address &= 0xFFFFFFFC;
 
@@ -905,29 +911,29 @@ impl ARMv5CPU {
         let bytes: [u8; 4] = u32_to_array(value, &self.encoding);
 
         self.set_memory(address, &bytes)?;
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn strb(
         &mut self, rd: ARMv5RegNames, am: AddressingMode
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let address: u32 = self.compute_modify_address(am);
         let value: u8 = self.get_register_intern(rd) as u8;
 
         //self.memory[address] = value;
         self.set_memory(address, &[value])?;
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn strbt(
         &mut self, rd: ARMv5RegNames, am: AddressingMode
-    ) -> Result<SimulationEvent, SimulationExceptionKind> { 
+    ) -> Result<CpuEvent, SimulationExceptionKind> { 
         self.strb(rd, am)
     }
 
     fn strh(
         &mut self, rd: ARMv5RegNames, am: AddressingMode
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let address: u32 = self.compute_modify_address(am);
 
         let value: u16 = self.get_register_intern(rd) as u16;
@@ -935,19 +941,19 @@ impl ARMv5CPU {
         
         //self.memory.splice(address..address+2, bytes);
         self.set_memory(address, &bytes)?;
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn strt(
         &mut self, rd: ARMv5RegNames, am: AddressingMode
-    ) -> Result<SimulationEvent, SimulationExceptionKind> { 
+    ) -> Result<CpuEvent, SimulationExceptionKind> { 
         self.str(rd, am)
     }
 
     //do not change any register if data abort (better then specification)
     fn ldm(
         &mut self, amm: AddressingModeMultiple
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let mut addresses: Vec<u32> = 
             self.compute_modify_address_multiple(&amm);
 
@@ -967,7 +973,7 @@ impl ARMv5CPU {
                 self.set_register_intern(reg_name, values[i] as i32);
             }
         }
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     //If the base register <Rn> is specified in <registers>, and base register write-back is specified,
@@ -976,7 +982,7 @@ impl ARMv5CPU {
 
     fn stm(
         &mut self, amm: AddressingModeMultiple
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let mut addresses: Vec<u32> = 
             self.compute_modify_address_multiple(&amm);
             
@@ -995,12 +1001,12 @@ impl ARMv5CPU {
                 self.set_memory(address, &bytes)?;
             }
         }
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn swp(
         &mut self, rn: ARMv5RegNames, rd: ARMv5RegNames, rm: ARMv5RegNames
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let mut address: u32 = self.get_register_intern(rn) as u32;
         let rot_bits: u32 = address.cut_bits(0..=1) * 8;
         address &= 0xFFFFFFFC;
@@ -1013,12 +1019,12 @@ impl ARMv5CPU {
         let bytes: [u8; 4] = u32_to_array(sv, &self.encoding);
         self.set_memory(address, &bytes)?;
         self.set_register_intern(rd, lv as i32);
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     fn swpb(
         &mut self, rn: ARMv5RegNames, rd: ARMv5RegNames, rm: ARMv5RegNames
-    ) -> Result<SimulationEvent, SimulationExceptionKind> {
+    ) -> Result<CpuEvent, SimulationExceptionKind> {
         let address: u32 = self.get_register_intern(rn) as u32;
 
         let lv: u8 = self.get_memory(address, 1)?[0];
@@ -1026,53 +1032,26 @@ impl ARMv5CPU {
         
         self.set_memory(address, &[sv])?;
         self.set_register_intern(rd, lv as i32);
-        Ok(SimulationEvent::None)
+        Ok(CpuEvent::None)
     }
 
     // Exception-generating instructions
-    // Linux system calls (EABI): number in r7, arguments and result in r0-r2
-    fn swi(&mut self) -> Result<SimulationEvent, SimulationExceptionKind> {
-        match self.get_register_intern(ARMv5RegNames::R7) {
-            1 => {
-                // Linux only keeps the lowest 8 bits of the exit code
-                let exit_code: i32 = 
-                    self.get_register_intern(ARMv5RegNames::R0) & 0xFF;
-                Ok(SimulationEvent::Exit{exit_code})
-            },
-            4 => {
-                let stream: i32 = self.get_register_intern(ARMv5RegNames::R0);
-                if stream != 1 && stream != 2 {
-                    // -EBADF: only stdout and stderr are open
-                    self.set_register_intern(ARMv5RegNames::R0, -9);
-                    return Ok(SimulationEvent::None);
-                }
-
-                let address: u32 = 
-                    self.get_register_intern(ARMv5RegNames::R1) as u32;
-                let length: u32 = 
-                    self.get_register_intern(ARMv5RegNames::R2) as u32;
-
-                let message: Vec<u8> = self.get_memory(address, length)?.to_vec();
-                // Return the number of written bytes
-                self.set_register_intern(ARMv5RegNames::R0, length as i32);
-                Ok(SimulationEvent::ConsoleOutput{stream, message})
-            },
-            number => Err(SimulationExceptionKind::UnsupportedSyscall { number })
-        }
+    fn swi(&self, immediate: u32) -> Result<CpuEvent, SimulationExceptionKind> {
+        Ok(CpuEvent::SoftwareInterrupt { immediate })
     }
 
-    fn bkpt(&mut self) -> Result<SimulationEvent, SimulationExceptionKind> { 
-        Ok(SimulationEvent::Breakpoint) 
+    fn bkpt(&mut self) -> Result<CpuEvent, SimulationExceptionKind> { 
+        Ok(CpuEvent::Breakpoint) 
     }
 
     // Status register access instructions
-    fn mrs(&mut self) -> Result<SimulationEvent, SimulationExceptionKind> {
+    fn mrs(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
             reason: "status register access is not supported yet"
         })
     }
 
-    fn msr(&mut self) -> Result<SimulationEvent, SimulationExceptionKind> {
+    fn msr(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
             reason: "status register access is not supported yet"
         })
@@ -1080,61 +1059,61 @@ impl ARMv5CPU {
 
 
     // Coprocessor instructions
-    fn cdp(&mut self) -> Result<SimulationEvent, SimulationExceptionKind> {
+    fn cdp(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
             reason: "coprocessor instructions are not supported"
         })
     }
 
-    fn cdp2(&mut self) -> Result<SimulationEvent, SimulationExceptionKind> {
+    fn cdp2(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
             reason: "coprocessor instructions are not supported"
         })
     }
 
-    fn ldc(&mut self) -> Result<SimulationEvent, SimulationExceptionKind> {
+    fn ldc(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
             reason: "coprocessor instructions are not supported"
         })
     }
 
-    fn ldc2(&mut self) -> Result<SimulationEvent, SimulationExceptionKind> {
+    fn ldc2(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
             reason: "coprocessor instructions are not supported"
         })
     }
 
-    fn mcr(&mut self) -> Result<SimulationEvent, SimulationExceptionKind> {
+    fn mcr(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
             reason: "coprocessor instructions are not supported"
         })
     }
 
-    fn mcr2(&mut self) -> Result<SimulationEvent, SimulationExceptionKind> {
+    fn mcr2(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
             reason: "coprocessor instructions are not supported"
         })
     }
 
-    fn mrc(&mut self) -> Result<SimulationEvent, SimulationExceptionKind> {
+    fn mrc(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
             reason: "coprocessor instructions are not supported"
         })
     }
 
-    fn mrc2(&mut self) -> Result<SimulationEvent, SimulationExceptionKind> {
+    fn mrc2(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
             reason: "coprocessor instructions are not supported"
         })
     }
 
-    fn stc(&mut self) -> Result<SimulationEvent, SimulationExceptionKind> {
+    fn stc(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
             reason: "coprocessor instructions are not supported"
         })
     }
 
-    fn stc2(&mut self) -> Result<SimulationEvent, SimulationExceptionKind> {
+    fn stc2(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
             reason: "coprocessor instructions are not supported"
         })
@@ -1147,8 +1126,9 @@ mod tests {
     use crate::utils::{T, F, Endian};
     use crate::simulated_cpu::{
         SimulatedCPU, ARMv5CPU, ARMv5RegNames, ARMv5FlagNames, 
-        SimulationEvent, SimulationExceptionKind,
-        instructions::{Condition, ARMv5DataProcessingOperation},
+        CpuEvent, SimulationExceptionKind,
+        instructions::{Condition, ARMv5DataProcessingOperation, ARMv5Instruction, Instruction},
+        instruction_decoder::{ARMv5Decoder, InstructionDecoder},
         operands::{
             ShifterOperand, barrel_shifter::ShiftType, 
             AddressingMode, OffsetType, AddressingModeMultiple
@@ -1898,19 +1878,8 @@ mod tests {
             (175325, [3,5,1,3], 0xA2, Endian::Big, T, 1, [3,5,221,3])
     }
 
-    fn assert_data_abort(result: Result<SimulationEvent, SimulationExceptionKind>) {
+    fn assert_data_abort(result: Result<CpuEvent, SimulationExceptionKind>) {
         assert!(matches!(result, Err(SimulationExceptionKind::DataAbort { .. })));
-    }
-
-    #[test]
-    fn write_outside_memory_is_data_abort() {
-        let mut cpu = ARMv5CPU::new();
-        cpu.set_register(ARMv5RegNames::R7, 4);
-        cpu.set_register(ARMv5RegNames::R0, 1);
-        cpu.set_register(ARMv5RegNames::R1, 0xFFFF_FF00u32 as i32);
-        cpu.set_register(ARMv5RegNames::R2, 0x200);
-
-        assert_data_abort(cpu.swi());
     }
 
     #[test]
@@ -1932,69 +1901,20 @@ mod tests {
     }
 
     #[test]
-    fn write_returns_number_of_bytes() {
+    fn swi_is_software_interrupt() {
         let mut cpu = ARMv5CPU::new();
-        cpu.memory.splice(0x2000..0x2003, *b"abc");
-        cpu.set_register(ARMv5RegNames::R7, 4);
-        cpu.set_register(ARMv5RegNames::R0, 1);
-        cpu.set_register(ARMv5RegNames::R1, 0x2000);
-        cpu.set_register(ARMv5RegNames::R2, 3);
+        let instruction: ARMv5Instruction = ARMv5Decoder::decode(0xEF90_0004);
 
-        match cpu.swi() {
-            Ok(SimulationEvent::ConsoleOutput { stream: 1, message }) => {
-                assert_eq!(b"abc".to_vec(), message)
-            },
-            _ => panic!("Expected output on stdout!")
-        }
-        assert_eq!(3, cpu.get_register(ARMv5RegNames::R0));
+        assert_eq!(
+            Ok(CpuEvent::SoftwareInterrupt { immediate: 0x90_0004 }), 
+            instruction.execute(&mut cpu)
+        );
     }
 
     #[test]
-    fn write_to_closed_file_descriptor_is_ebadf() {
-        let mut cpu = ARMv5CPU::new();
-        cpu.set_register(ARMv5RegNames::R7, 4);
-        cpu.set_register(ARMv5RegNames::R0, 5);
-        cpu.set_register(ARMv5RegNames::R2, 3);
-
-        assert!(matches!(cpu.swi(), Ok(SimulationEvent::None)));
-        assert_eq!(-9, cpu.get_register(ARMv5RegNames::R0));
-    }
-
-    #[test]
-    fn unknown_syscall_is_error() {
-        let mut cpu = ARMv5CPU::new();
-        cpu.set_register(ARMv5RegNames::R7, 3);
-
-        assert!(matches!(
-            cpu.swi(), Err(SimulationExceptionKind::UnsupportedSyscall { number: 3 })
-        ));
-    }
-
-    macro_rules! exit_code_tests {
-        ($($test_name:ident: $test_values:expr),*) 
-        => {$(
-            #[test]
-            fn $test_name() {
-                let (r0, exp_exit_code): (i32, i32) = $test_values;
-
-                let mut cpu = ARMv5CPU::new();
-                cpu.set_register(ARMv5RegNames::R7, 1);
-                cpu.set_register(ARMv5RegNames::R0, r0);
-
-                match cpu.swi() {
-                    Ok(SimulationEvent::Exit { exit_code }) => {
-                        assert_eq!(exp_exit_code, exit_code)
-                    },
-                    _ => panic!("Expected exit!")
-                }
-            }
-        )*}
-    }
-
-    exit_code_tests! {
-        exit_code_in_range: (42, 42),
-        exit_code_keeps_lowest_8_bits: (300, 44),
-        exit_code_negative: (-1, 255)
+    fn swi_disassembly() {
+        assert_eq!("SWIEQ #42", ARMv5Decoder::decode(0x0F00_002A).to_string());
+        assert_eq!("SWI #0", ARMv5Decoder::decode(0xEF00_0000).to_string());
     }
 
     #[test]
