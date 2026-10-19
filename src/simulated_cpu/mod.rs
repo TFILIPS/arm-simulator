@@ -39,7 +39,8 @@ pub enum SimulationEvent {
 pub enum SimulationExceptionKind {
     DataAbort{memory_address: usize, size: usize}, 
     UnsupportedInstruction, 
-    UndefinedInstruction
+    UndefinedInstruction,
+    UnsupportedSyscall{number: i32}
 }
 #[derive(Debug)]
 pub struct SimulationException { 

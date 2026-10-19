@@ -1033,25 +1033,40 @@ impl ARMv5CPU {
     }
 
     // Exception-generating instructions
+    // Linux system calls (EABI): number in r7, arguments and result in r0-r2
     fn swi(&mut self) -> Result<SimulationEvent, SimulationException> {
         match self.get_register_intern(ARMv5RegNames::R7) {
             1 => {
-                let exit_code: i32 = self.get_register_intern(ARMv5RegNames::R0);
-                return Ok(SimulationEvent::Exit{exit_code});
+                // Linux only keeps the lowest 8 bits of the exit code
+                let exit_code: i32 = 
+                    self.get_register_intern(ARMv5RegNames::R0) & 0xFF;
+                Ok(SimulationEvent::Exit{exit_code})
             },
             4 => {
                 let stream: i32 = self.get_register_intern(ARMv5RegNames::R0);
+                if stream != 1 && stream != 2 {
+                    // -EBADF: only stdout and stderr are open
+                    self.set_register_intern(ARMv5RegNames::R0, -9);
+                    return Ok(SimulationEvent::None);
+                }
+
                 let address: u32 = 
                     self.get_register_intern(ARMv5RegNames::R1) as u32;
                 let length: u32 = 
                     self.get_register_intern(ARMv5RegNames::R2) as u32;
 
                 let message: Vec<u8> = self.get_memory(address, length)?.to_vec();
-                return Ok(SimulationEvent::ConsoleOutput{stream, message});
+                // Return the number of written bytes
+                self.set_register_intern(ARMv5RegNames::R0, length as i32);
+                Ok(SimulationEvent::ConsoleOutput{stream, message})
             },
-            _ => ()
+            number => Err(SimulationException {
+                kind: SimulationExceptionKind::UnsupportedSyscall { number },
+                msg: format!(
+                    "Unsupported system call {number} (r7). Supported: 1 = exit, 4 = write"
+                )
+            })
         }
-        Ok(SimulationEvent::None)
     }
 
     fn bkpt(&mut self) -> Result<SimulationEvent, SimulationException> { 
@@ -1937,6 +1952,75 @@ mod tests {
 
         assert_data_abort(cpu.swpb(ARMv5RegNames::R0, ARMv5RegNames::R1, ARMv5RegNames::R2));
         assert_eq!(0, cpu.get_register(ARMv5RegNames::R1));
+    }
+
+    #[test]
+    fn write_returns_number_of_bytes() {
+        let mut cpu = ARMv5CPU::new();
+        cpu.memory.splice(0x2000..0x2003, *b"abc");
+        cpu.set_register(ARMv5RegNames::R7, 4);
+        cpu.set_register(ARMv5RegNames::R0, 1);
+        cpu.set_register(ARMv5RegNames::R1, 0x2000);
+        cpu.set_register(ARMv5RegNames::R2, 3);
+
+        match cpu.swi() {
+            Ok(SimulationEvent::ConsoleOutput { stream: 1, message }) => {
+                assert_eq!(b"abc".to_vec(), message)
+            },
+            _ => panic!("Expected output on stdout!")
+        }
+        assert_eq!(3, cpu.get_register(ARMv5RegNames::R0));
+    }
+
+    #[test]
+    fn write_to_closed_file_descriptor_is_ebadf() {
+        let mut cpu = ARMv5CPU::new();
+        cpu.set_register(ARMv5RegNames::R7, 4);
+        cpu.set_register(ARMv5RegNames::R0, 5);
+        cpu.set_register(ARMv5RegNames::R2, 3);
+
+        assert!(matches!(cpu.swi(), Ok(SimulationEvent::None)));
+        assert_eq!(-9, cpu.get_register(ARMv5RegNames::R0));
+    }
+
+    #[test]
+    fn unknown_syscall_is_error() {
+        let mut cpu = ARMv5CPU::new();
+        cpu.set_register(ARMv5RegNames::R7, 3);
+
+        assert!(matches!(
+            cpu.swi(),
+            Err(SimulationException { 
+                kind: SimulationExceptionKind::UnsupportedSyscall { number: 3 }, .. 
+            })
+        ));
+    }
+
+    macro_rules! exit_code_tests {
+        ($($test_name:ident: $test_values:expr),*) 
+        => {$(
+            #[test]
+            fn $test_name() {
+                let (r0, exp_exit_code): (i32, i32) = $test_values;
+
+                let mut cpu = ARMv5CPU::new();
+                cpu.set_register(ARMv5RegNames::R7, 1);
+                cpu.set_register(ARMv5RegNames::R0, r0);
+
+                match cpu.swi() {
+                    Ok(SimulationEvent::Exit { exit_code }) => {
+                        assert_eq!(exp_exit_code, exit_code)
+                    },
+                    _ => panic!("Expected exit!")
+                }
+            }
+        )*}
+    }
+
+    exit_code_tests! {
+        exit_code_in_range: (42, 42),
+        exit_code_keeps_lowest_8_bits: (300, 44),
+        exit_code_negative: (-1, 255)
     }
 
     #[test]
