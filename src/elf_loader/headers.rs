@@ -3,7 +3,7 @@ use std::mem::size_of;
 use crate::utils::{slice_to_u16, slice_to_u32, Endian};
 use super::{ELF_ID, HEADER_VERSION_KEY};
 
-pub enum ValueError { Version, Type, Machine, Class, OsAbi }
+pub enum HeaderError { Version, Type, Machine, Class, OsAbi }
 
 #[repr(C)]
 pub struct ELFHeader {
@@ -69,21 +69,21 @@ impl ELFHeader {
         machine: u16,
         class: u8,
         os_abi: u8
-    ) -> Result<(), ValueError> {
+    ) -> Result<(), HeaderError> {
         if self.elf_version != elf_version {
-            return Err(ValueError::Version);
+            return Err(HeaderError::Version);
         }
         if self.elf_type != elf_type {
-            return Err(ValueError::Type);
+            return Err(HeaderError::Type);
         }
         if self.machine != machine {
-            return Err(ValueError::Machine);
+            return Err(HeaderError::Machine);
         }
         if self.elf_id[4] != class {
-            return Err(ValueError::Class);
+            return Err(HeaderError::Class);
         }
         if self.elf_id[7] != os_abi {
-            return Err(ValueError::OsAbi);
+            return Err(HeaderError::OsAbi);
         }
         Ok(())
     }

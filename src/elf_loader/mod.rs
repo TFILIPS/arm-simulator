@@ -3,7 +3,7 @@ use std::{fs, error::Error, fmt::Display};
 use crate::utils::{Endian, Memory};
 use headers::{
     ELFHeader, ELFTableEntry, ProgramHeader, 
-    SectionHeader, SymbolTableEntry, ValueError
+    SectionHeader, SymbolTableEntry, HeaderError
 };
 
 mod headers;
@@ -166,19 +166,19 @@ impl ELFFile {
             ELF_VERSION_KEY, ELF_TYPE_KEY, MACHINE_KEY, 
             CLASS_KEY, OSABI_KEY
         ) {
-            Err(ValueError::Version) => {
+            Err(HeaderError::Version) => {
                 Err("The ELF file has an invalid version!")
             },
-            Err(ValueError::Type) => {
+            Err(HeaderError::Type) => {
                 Err("The ELF file is not an executable file!")
             },
-            Err(ValueError::Machine) => {
+            Err(HeaderError::Machine) => {
                 Err("The ELF file is not ARM compatible!")
             },
-            Err(ValueError::Class) => {
+            Err(HeaderError::Class) => {
                 Err("The ELF file is not 32-bit compatible!")
             },
-            Err(ValueError::OsAbi) => {
+            Err(HeaderError::OsAbi) => {
                 Err("The target of the ELF file is not Unix-SystemV!")
             }
             Ok(_) => Ok(())
