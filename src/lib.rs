@@ -6,7 +6,11 @@ use wasm_bindgen::prelude::*;
 use elf_loader::ELFFile;
 use simulated_cpu::{names::ARMv5FlagNames, ARMv5CPU, SimulatedCPU};
 use utils::Memory;
-pub use simulated_cpu::{SimulationEvent, SimulationException, names::ARMv5RegNames};
+pub use elf_loader::ElfError;
+pub use simulated_cpu::{
+    SimulationEvent, SimulationException, SimulationExceptionKind, names::ARMv5RegNames
+};
+pub use utils::MemoryException;
 
 mod elf_loader;
 mod simulated_cpu;
@@ -33,17 +37,17 @@ impl ARMSimulator {
         }
     }
  
-    pub fn load_elf_file(&mut self, path: &str) -> Result<(), &'static str> {
+    pub fn load_elf_file(&mut self, path: &str) -> Result<(), ElfError> {
         let elf: ELFFile = ELFFile::load(path)?;
         self.load_elf(elf)
     }
 
-    pub fn load_elf_bytes(&mut self, bytes: Vec<u8>) -> Result<(), &'static str> {
+    pub fn load_elf_bytes(&mut self, bytes: Vec<u8>) -> Result<(), ElfError> {
         let elf: ELFFile = ELFFile::load_raw(bytes)?;
         self.load_elf(elf)
     }
 
-    fn load_elf(&mut self, elf: ELFFile) -> Result<(), &'static str> {
+    fn load_elf(&mut self, elf: ELFFile) -> Result<(), ElfError> {
         elf.check_header_values()?;
 
         self.simulated_cpu.set_register(ARMv5RegNames::PC, elf.get_entry_point() as i32);
@@ -79,7 +83,7 @@ impl ARMSimulator {
         Ok(SimulationEvent::None)
     }
 
-    pub fn get_disassembly(&self) -> Result<String, &'static str> {
+    pub fn get_disassembly(&self) -> Result<String, ElfError> {
         if let Some(elf_file) = &self.elf_file {
             let (text_start, text_end) = elf_file.get_text_section_range()?;
 
@@ -87,14 +91,14 @@ impl ARMSimulator {
             let size: u32 = (text_end - text_start).checked_next_multiple_of(4)
                 .ok_or("The .text section is too large! Check ELF file.")?;
             if self.simulated_cpu.get_memory(text_start, size).is_err() {
-                return Err("The .text section is outside of memory! Check ELF file.");
+                return Err("The .text section is outside of memory! Check ELF file.".into());
             }
 
             let labels: Vec<(u32, String)> = elf_file.get_labels()?;
             Ok(self.simulated_cpu.disassemble_memory(text_start, text_end, labels))
         }
         else {
-            Err("No ELF file loaded!")
+            Err("No ELF file loaded!".into())
         }
     }
 
@@ -129,18 +133,12 @@ impl ARMSimulator {
         self.simulated_cpu.set_flag(flag, value);
     }
 
-    pub fn get_memory(&self, address: u32, size: u32) -> Result<Vec<u8>, String> {
-        match self.simulated_cpu.get_memory(address, size) {
-            Ok(bytes) => Ok(Vec::from(bytes)),
-            Err(err) => Err(err.msg)
-        }
+    pub fn get_memory(&self, address: u32, size: u32) -> Result<Vec<u8>, MemoryException> {
+        self.simulated_cpu.get_memory(address, size).map(Vec::from)
     }
 
-    pub fn set_memory(&mut self, address: u32, bytes: &[u8]) -> Result<(), String> {
-        match self.simulated_cpu.set_memory(address, bytes) {
-            Ok(()) => Ok(()),
-            Err(err) => Err(err.msg)
-        }
+    pub fn set_memory(&mut self, address: u32, bytes: &[u8]) -> Result<(), MemoryException> {
+        self.simulated_cpu.set_memory(address, bytes)
     }
 
     pub fn add_breakpoint(&mut self, address: u32) {
@@ -151,7 +149,7 @@ impl ARMSimulator {
         self.dynamic_breakpoints.remove(&address);
     }
 
-    pub fn reload_simulator(&mut self) -> Result<(), String> {  
+    pub fn reload_simulator(&mut self) -> Result<(), ElfError> {  
         self.simulated_cpu.reset();
         self.stopped_at_breakpoint = None;
         self.simulated_cpu.set_register(ARMv5RegNames::SP, DEFAULT_STACK_POINTER as i32);
@@ -164,9 +162,21 @@ impl ARMSimulator {
     }
 }
 
+// Errors returned to JavaScript become JS Error objects
+impl From<ElfError> for JsValue {
+    fn from(error: ElfError) -> Self {
+        JsError::new(&error.to_string()).into()
+    }
+}
+impl From<MemoryException> for JsValue {
+    fn from(error: MemoryException) -> Self {
+        JsError::new(&error.to_string()).into()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::{ARMSimulator, ARMv5RegNames, SimulationEvent};
+    use crate::{ARMSimulator, ARMv5RegNames, ElfError, SimulationEvent};
 
     // 0x1000: mov r0, r0
     // 0x1004: mov r0, r0   <- breakpoint
@@ -251,6 +261,13 @@ mod tests {
         let mut sim = ARMSimulator::new();
         sim.load_elf_bytes(bytes).unwrap();
         assert!(sim.get_disassembly().is_err());
+    }
+
+    #[test]
+    fn invalid_elf_file_is_elf_error() {
+        let mut sim = ARMSimulator::new();
+        let error: ElfError = sim.load_elf_bytes(vec![0; 10]).unwrap_err();
+        assert_eq!("ELF file is to short to be valid!", error.to_string());
     }
 
     #[test]

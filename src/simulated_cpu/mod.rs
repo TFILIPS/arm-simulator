@@ -1,6 +1,6 @@
-use std::{io::Write, collections::HashMap};
+use std::{io::Write, collections::HashMap, error::Error, fmt::Display};
 
-use crate::utils::{Endian, slice_to_u32, Memory, MemoryException};
+use crate::utils::{Endian, slice_to_u32, byte_count, Memory, MemoryException};
 
 use instructions::{Instruction, ARMv5Instruction};
 use names::{ARMv5RegNames, ARMv5FlagNames};
@@ -35,26 +35,50 @@ pub enum SimulationEvent {
     ConsoleOutput{stream: i32, message: Vec<u8>}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SimulationExceptionKind {
-    DataAbort{memory_address: usize, size: usize}, 
-    UnsupportedInstruction, 
+    PrefetchAbort,
+    DataAbort{memory_address: u32, size: u32}, 
     UndefinedInstruction,
+    UnsupportedInstruction{reason: &'static str}, 
     UnsupportedSyscall{number: i32}
 }
-#[derive(Debug)]
-pub struct SimulationException { 
-    pub kind: SimulationExceptionKind, 
-    pub msg: String 
-}
-impl From<MemoryException> for SimulationException {
+impl From<MemoryException> for SimulationExceptionKind {
     fn from(value: MemoryException) -> Self {
-        SimulationException { 
-            kind: SimulationExceptionKind::DataAbort { 
-                memory_address: value.address, 
-                size: value.size 
-            },
-            msg: value.msg
+        SimulationExceptionKind::DataAbort { 
+            memory_address: value.address, 
+            size: value.size 
+        }
+    }
+}
+
+// Exception caused by the instruction at address
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SimulationException { 
+    pub address: u32,
+    pub kind: SimulationExceptionKind
+}
+impl Error for SimulationException {}
+impl Display for SimulationException {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let address: u32 = self.address;
+        match &self.kind {
+            SimulationExceptionKind::PrefetchAbort => write!(f, 
+                "Prefetch abort at 0x{address:08X}: no instruction outside of memory"
+            ),
+            SimulationExceptionKind::DataAbort { memory_address, size } => write!(f,
+                "Data abort at 0x{address:08X}: access to 0x{memory_address:08X} ({}) is outside of memory",
+                byte_count(*size)
+            ),
+            SimulationExceptionKind::UndefinedInstruction => write!(f,
+                "Undefined instruction at 0x{address:08X}"
+            ),
+            SimulationExceptionKind::UnsupportedInstruction { reason } => write!(f,
+                "Unsupported instruction at 0x{address:08X}: {reason}"
+            ),
+            SimulationExceptionKind::UnsupportedSyscall { number } => write!(f,
+                "Unsupported system call {number} (r7) at 0x{address:08X}: supported are 1 = exit and 4 = write"
+            )
         }
     }
 }
@@ -211,44 +235,21 @@ impl ARMv5CPU {
                 return Ok((start, end));
             }
         }
-        Err(MemoryException { 
-            address: address as usize, 
-            size: size as usize,
-            msg: "Memory access out of bounds!".to_string()
-        })
+        Err(MemoryException { address, size })
     }
 
     fn load_and_execute_instruction(
         &mut self, address: u32
     ) -> Result<SimulationEvent, SimulationException>{
-        match self.get_memory(address, 4) {
-            Ok(bytes) => {
-                let bits: u32 = slice_to_u32(&bytes, &self.encoding);
-                let instruction: ARMv5Instruction = ARMv5Decoder::decode(bits);
+        let bits: u32 = match self.get_memory(address, 4) {
+            Ok(bytes) => slice_to_u32(bytes, &self.encoding),
+            Err(_) => return Err(SimulationException { 
+                address, kind: SimulationExceptionKind::PrefetchAbort 
+            })
+        };
 
-                instruction.execute(self).or_else(|err|
-                    //Clarify returned error message
-                    Err(SimulationException {
-                        kind: err.kind,
-                        msg: format!(
-                            "Exception caused by instruction at 0x{:X}: {}",
-                            address, err.msg
-                        )
-                    })
-                )
-            }
-            Err(mem_err) => {
-                //Convert and clarify returned error message
-                let sim_err: SimulationException = mem_err.into();
-                Err(SimulationException {
-                    kind: sim_err.kind,
-                    msg: format!(
-                        "Unable to fetch instruction at address 0x{:X}!\n",
-                        address
-                    )
-                })
-            }
-        }
+        let instruction: ARMv5Instruction = ARMv5Decoder::decode(bits);
+        instruction.execute(self).map_err(|kind| SimulationException { address, kind })
     }
 }
 
@@ -268,8 +269,11 @@ impl ARMv5CPU {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::Memory;
-    use super::{SimulatedCPU, ARMv5CPU, names::ARMv5RegNames};
+    use crate::utils::{Memory, MemoryException};
+    use super::{
+        SimulatedCPU, ARMv5CPU, SimulationException, SimulationExceptionKind,
+        names::ARMv5RegNames
+    };
 
     macro_rules! step_tests {
         ($($test_name:ident: $test_values:expr),*) 
@@ -327,5 +331,85 @@ mod tests {
         memory_word_crossing_end: (0x3FF_FFFE, 4, false),
         memory_one_past_end: (0x400_0000, 1, false),
         memory_empty_at_end: (0x400_0000, 0, true)
+    }
+
+    #[test]
+    fn memory_exception_reports_access() {
+        let cpu = ARMv5CPU::new();
+        assert_eq!(
+            Err(MemoryException { address: 0x3FF_FFFE, size: 4 }), 
+            cpu.get_memory(0x3FF_FFFE, 4)
+        );
+    }
+
+    #[test]
+    fn fetch_outside_memory_is_prefetch_abort() {
+        let mut cpu = ARMv5CPU::new();
+        cpu.set_register(ARMv5RegNames::PC, 0x7FFF_0000);
+
+        assert_eq!(
+            Some(SimulationException { 
+                address: 0x7FFF_0000, kind: SimulationExceptionKind::PrefetchAbort 
+            }),
+            cpu.step().err()
+        );
+    }
+
+    #[test]
+    fn data_abort_reports_accessed_address() {
+        // ldr r0, [r1] with r1 outside of memory
+        let mut cpu = ARMv5CPU::new();
+        cpu.set_memory(0x1000, &0xE591_0000u32.to_le_bytes()).unwrap();
+        cpu.set_register(ARMv5RegNames::PC, 0x1000);
+        cpu.set_register(ARMv5RegNames::R1, 0xFFFF_FFF0u32 as i32);
+
+        assert_eq!(
+            Some(SimulationException { 
+                address: 0x1000, 
+                kind: SimulationExceptionKind::DataAbort { memory_address: 0xFFFF_FFF0, size: 4 }
+            }),
+            cpu.step().err()
+        );
+    }
+
+    macro_rules! exception_message_tests {
+        ($($test_name:ident: $test_values:expr),*) 
+        => {$(
+            #[test]
+            fn $test_name() {
+                let (kind, message): (SimulationExceptionKind, &str) = $test_values;
+                let exception = SimulationException { address: 0x10084, kind };
+                assert_eq!(message, exception.to_string());
+            }
+        )*}
+    }
+
+    exception_message_tests! {
+        message_prefetch_abort: (
+            SimulationExceptionKind::PrefetchAbort,
+            "Prefetch abort at 0x00010084: no instruction outside of memory"
+        ),
+        message_data_abort: (
+            SimulationExceptionKind::DataAbort { memory_address: 0xFFFF_FF00, size: 512 },
+            "Data abort at 0x00010084: access to 0xFFFFFF00 (512 bytes) is outside of memory"
+        ),
+        message_data_abort_single_byte: (
+            SimulationExceptionKind::DataAbort { memory_address: 0x400_0000, size: 1 },
+            "Data abort at 0x00010084: access to 0x04000000 (1 byte) is outside of memory"
+        ),
+        message_undefined_instruction: (
+            SimulationExceptionKind::UndefinedInstruction,
+            "Undefined instruction at 0x00010084"
+        ),
+        message_unsupported_instruction: (
+            SimulationExceptionKind::UnsupportedInstruction { 
+                reason: "coprocessor instructions are not supported" 
+            },
+            "Unsupported instruction at 0x00010084: coprocessor instructions are not supported"
+        ),
+        message_unsupported_syscall: (
+            SimulationExceptionKind::UnsupportedSyscall { number: 3 },
+            "Unsupported system call 3 (r7) at 0x00010084: supported are 1 = exit and 4 = write"
+        )
     }
 }

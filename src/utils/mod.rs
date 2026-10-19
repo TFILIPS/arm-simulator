@@ -115,22 +115,23 @@ fn get_bounds<T: RangeBounds<usize>>(range: T, max: usize) -> (usize, usize) {
     (start, end)
 }
 
-#[derive(Debug)]
+// Access to memory outside of the simulated memory
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MemoryException {
-    pub address: usize, pub size: usize, pub msg: String
+    pub address: u32, pub size: u32
 }
 
-impl Error for MemoryException {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
-    }
-}
+impl Error for MemoryException {}
 
 impl std::fmt::Display for MemoryException {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "MemoryException: {} at address {} with size {}",
-            self.msg, self.address, self.size)
+        write!(f, "Memory access to 0x{:08X} ({}) is outside of memory",
+            self.address, byte_count(self.size))
     }
+}
+
+pub fn byte_count(size: u32) -> String {
+    if size == 1 { String::from("1 byte") } else { format!("{size} bytes") }
 }
 
 pub trait Memory {

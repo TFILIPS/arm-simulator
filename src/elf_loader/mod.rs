@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, error::Error, fmt::Display};
 
 use crate::utils::{Endian, Memory};
 use headers::{
@@ -23,6 +23,21 @@ const OSABI_KEY: u8 = 0x0; // UNIX - System V
 const CLASS_KEY: u8 = 0x1; // 32-Bit
 const MACHINE_KEY: u16 = 0x28; // ARM
 const ELF_TYPE_KEY: u16 = 0x2; // executable
+
+// Error while loading or reading an ELF file
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ElfError(&'static str);
+impl From<&'static str> for ElfError {
+    fn from(message: &'static str) -> Self {
+        ElfError(message)
+    }
+}
+impl Error for ElfError {}
+impl Display for ElfError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 pub struct ELFFile {
     elf_header: ELFHeader,

@@ -1,6 +1,6 @@
-use std::{env, io::{self, Write}, process::exit};
+use std::{env, fmt::Display, io::{self, Write}, process::exit};
 
-use arm_simulator::{ARMSimulator, SimulationEvent, SimulationException};
+use arm_simulator::{ARMSimulator, SimulationEvent};
 
 fn main() {
     let (path, disassemble): (String, bool) = parse_arguments();
@@ -24,8 +24,8 @@ fn main() {
                 Ok(SimulationEvent::Exit { exit_code }) => {
                     exit(exit_code);
                 },
-                Err(SimulationException { msg, .. }) => {
-                    eprintln!("{msg}");
+                Err(exception) => {
+                    eprintln!("{exception}");
                     exit(1);
                 },
                 _ => {}
@@ -66,10 +66,10 @@ trait ExitOnError<T> {
     fn unwrap_or_exit(self) -> T;
 }
 
-impl<T> ExitOnError<T> for Result<T, &'static str> {
+impl<T, E: Display> ExitOnError<T> for Result<T, E> {
     fn unwrap_or_exit(self) -> T {
-        self.unwrap_or_else(|msg| {
-            eprintln!("{msg}");
+        self.unwrap_or_else(|error| {
+            eprintln!("{error}");
             exit(1);
         })
     }
