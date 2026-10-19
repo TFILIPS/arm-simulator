@@ -1,5 +1,7 @@
-use std::{ops::{Index, IndexMut}, mem::transmute, fmt::Display};
+use std::{ops::{Index, IndexMut}, fmt::Display};
 use wasm_bindgen::prelude::wasm_bindgen;
+
+use crate::utils::variant_from_index;
 
 #[repr(u32)]
 #[wasm_bindgen]
@@ -17,15 +19,6 @@ impl<T> Index<ARMv5FlagNames> for [T] {
 impl<T> IndexMut<ARMv5FlagNames> for [T] {
     fn index_mut(&mut self, index: ARMv5FlagNames) -> &mut Self::Output {
         return &mut self[index as usize];
-    }
-}
-impl From<u32> for ARMv5FlagNames{
-    fn from(value: u32) -> Self {
-        const NUM_FLAGS: u32 = 16;
-        if value >= NUM_FLAGS {
-            panic!("Convertion to FlagNames failed! value >= {NUM_FLAGS}");
-        }
-        unsafe { transmute(value) }
     }
 }
 
@@ -49,18 +42,38 @@ impl<T> IndexMut<ARMv5RegNames> for [T] {
         return &mut self[index as usize];
     }
 }
-// Allow convertion from u32 to RegNames
+impl ARMv5RegNames {
+    const ALL: [ARMv5RegNames; 16] = [
+        Self::R0, Self::R1, Self::R2, Self::R3, Self::R4, Self::R5, Self::R6,
+        Self::R7, Self::R8, Self::R9, Self::R10, Self::R11, Self::R12,
+        Self::SP, Self::LR, Self::PC
+    ];
+}
+// Allow conversion from u32 to RegNames
 impl From<u32> for ARMv5RegNames {
     fn from(value: u32) -> Self {
-        const NUM_REGISTERS: u32 = 16;
-        if value >= NUM_REGISTERS {
-            panic!("Convertion to RegNames failed! value >= {NUM_REGISTERS}");
-        }
-        unsafe { transmute(value) }
+        variant_from_index(&ARMv5RegNames::ALL, value)
     }
 }
 impl Display for ARMv5RegNames {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::ARMv5RegNames;
+
+    #[test]
+    fn reg_names_from_u32() {
+        for value in 0..16 {
+            assert_eq!(value, ARMv5RegNames::from(value) as u32);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "ARMv5RegNames failed! 16 is not in 0..16")]
+    fn reg_names_from_u32_out_of_range() {
+        let _ = ARMv5RegNames::from(16);
     }
 }

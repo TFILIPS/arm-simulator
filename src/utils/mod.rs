@@ -42,6 +42,17 @@ pub fn u32_to_array(value: u32, encoding: &Endian) -> [u8; 4] {
     }
 }
 
+// Returns the enum variant at position index, e.g. for decoding bit fields
+pub(crate) fn variant_from_index<T: Copy>(variants: &[T], index: u32) -> T {
+    match variants.get(index as usize) {
+        Some(variant) => *variant,
+        None => panic!(
+            "Conversion to {} failed! {index} is not in 0..{}",
+            std::any::type_name::<T>(), variants.len()
+        )
+    }
+}
+
 
 pub trait BitAccess {
    fn get_bit(&self, index: usize) -> bool;

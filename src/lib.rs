@@ -1,3 +1,5 @@
+#![deny(unsafe_code)]
+
 use std::collections::HashSet;
 use wasm_bindgen::prelude::*;
 
@@ -103,11 +105,11 @@ impl ARMSimulator {
     }
 
     pub fn get_flag(&self, flag: ARMv5FlagNames) -> bool {
-        self.simulated_cpu.get_flag(flag.into())
+        self.simulated_cpu.get_flag(flag)
     }
 
     pub fn set_flag(&mut self, flag: ARMv5FlagNames, value: bool) {
-        self.simulated_cpu.set_flag(flag.into(), value);
+        self.simulated_cpu.set_flag(flag, value);
     }
 
     pub fn get_memory(&self, address: u32, size: u32) -> Result<Vec<u8>, String> {

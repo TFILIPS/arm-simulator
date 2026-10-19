@@ -1,4 +1,4 @@
-use std::{fmt::Display, mem::transmute};
+use std::fmt::Display;
 
 use super::{
     SimulatedCPU, ARMv5CPU, names::{ARMv5RegNames, ARMv5FlagNames}, SimulationException,
@@ -9,7 +9,8 @@ use super::{
     SimulationExceptionKind, SimulationEvent
 };
 use crate::utils::{
-    slice_to_u32, BitAccess, slice_to_u16, u32_to_array, u16_to_array, Memory
+    slice_to_u32, BitAccess, slice_to_u16, u32_to_array, u16_to_array, Memory,
+    variant_from_index
 };
 
 pub trait Instruction<C: SimulatedCPU>: Display {
@@ -19,15 +20,19 @@ pub trait Instruction<C: SimulatedCPU>: Display {
 // Todo: Remove Clone and Copy from all enums where its possible and rent values
 
 #[repr(u32)]
-#[allow(dead_code)]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Condition { 
     EQ, NE, HS, LO, MI, PL, VS, VC, HI, LS, GE, LT, GT, LE, AL, Unconditional
 }
 impl Condition {
+    const ALL: [Condition; 16] = [
+        Self::EQ, Self::NE, Self::HS, Self::LO, Self::MI, Self::PL, Self::VS, Self::VC,
+        Self::HI, Self::LS, Self::GE, Self::LT, Self::GT, Self::LE, Self::AL, Self::Unconditional
+    ];
+
     pub(super) fn from_instruction(instruction: u32) -> Condition {
         let cond_bits: u32 = instruction.cut_bits(28..32);
-        unsafe { transmute(cond_bits) }
+        variant_from_index(&Condition::ALL, cond_bits)
     }
 
     fn is_satisfied(&self, flags: &[bool; 4]) -> bool {
@@ -67,20 +72,19 @@ impl Display for Condition {
 }
 
 #[repr(u32)]
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ARMv5DataProcessingOperation {
     AND, EOR, SUB, RSB, ADD, ADC, SBC, RSC,
     TST, TEQ, CMP, CMN, ORR, MOV, BIC, MVN
 }
 impl ARMv5DataProcessingOperation {
-    const NUM_OPERATIONS: u32 = 16;
+    const ALL: [ARMv5DataProcessingOperation; 16] = [
+        Self::AND, Self::EOR, Self::SUB, Self::RSB, Self::ADD, Self::ADC, Self::SBC, Self::RSC,
+        Self::TST, Self::TEQ, Self::CMP, Self::CMN, Self::ORR, Self::MOV, Self::BIC, Self::MVN
+    ];
 
     pub fn from_bits(bits: u32) -> ARMv5DataProcessingOperation {
-        if bits >= ARMv5DataProcessingOperation::NUM_OPERATIONS {
-            panic!("Conversion to ARMv5DataProcessingOperation failed!");
-        }
-        unsafe { transmute(bits) }
+        variant_from_index(&ARMv5DataProcessingOperation::ALL, bits)
     }
 }
 
@@ -1149,6 +1153,7 @@ mod tests {
     use crate::simulated_cpu::{
         SimulatedCPU, ARMv5CPU, ARMv5RegNames, ARMv5FlagNames, 
         SimulationEvent, SimulationException, SimulationExceptionKind,
+        instructions::{Condition, ARMv5DataProcessingOperation},
         operands::{
             ShifterOperand, barrel_shifter::ShiftType, 
             AddressingMode, OffsetType, AddressingModeMultiple
@@ -1932,5 +1937,19 @@ mod tests {
 
         assert_data_abort(cpu.swpb(ARMv5RegNames::R0, ARMv5RegNames::R1, ARMv5RegNames::R2));
         assert_eq!(0, cpu.get_register(ARMv5RegNames::R1));
+    }
+
+    #[test]
+    fn condition_from_instruction() {
+        for value in 0..16 {
+            assert_eq!(value, Condition::from_instruction(value << 28) as u32);
+        }
+    }
+
+    #[test]
+    fn data_processing_operation_from_bits() {
+        for value in 0..16 {
+            assert_eq!(value, ARMv5DataProcessingOperation::from_bits(value) as u32);
+        }
     }
 }

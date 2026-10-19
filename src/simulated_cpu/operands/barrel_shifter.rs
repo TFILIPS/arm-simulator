@@ -1,19 +1,19 @@
-use std::{mem::transmute, fmt::Display};
+use std::fmt::Display;
+
+use crate::utils::variant_from_index;
 
 #[repr(u32)]
-#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShiftType { 
     LSL, LSR, ASR, ROR, RRX //RRX is encoded as a special case of ROR
 } 
-// Allow convertion from u32 to ShiftType
+impl ShiftType {
+    const ALL: [ShiftType; 5] = [Self::LSL, Self::LSR, Self::ASR, Self::ROR, Self::RRX];
+}
+// Allow conversion from u32 to ShiftType
 impl From<u32> for ShiftType {
     fn from(value: u32) -> Self {
-        const NUM_SHIFTS: u32 = 5;
-        if value >= NUM_SHIFTS {
-            panic!("Convertion to ShiftType failed! value >= {NUM_SHIFTS}");
-        }
-        unsafe { transmute(value) }
+        variant_from_index(&ShiftType::ALL, value)
     }
 }
 impl Display for ShiftType {
@@ -75,6 +75,13 @@ impl ShiftType {
 mod tests {
     use super::ShiftType;
     use crate::utils::{T, F};
+
+    #[test]
+    fn shift_type_from_u32() {
+        for value in 0..5 {
+            assert_eq!(value, ShiftType::from(value) as u32);
+        }
+    }
 
     macro_rules! barrel_shifter_tests {
         (shift: $shift:ident, $($test_name:ident: $test_values:expr),*) 
