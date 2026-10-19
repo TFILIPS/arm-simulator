@@ -1,4 +1,6 @@
 #![deny(unsafe_code)]
+// ARM and ELF are written in capitals like in the specifications
+#![allow(clippy::upper_case_acronyms)]
 
 use std::collections::HashSet;
 use wasm_bindgen::prelude::*;
@@ -117,6 +119,12 @@ impl ARMSimulator {
 
     pub fn get_flags(&self) -> Vec<bool> {
         Vec::from(self.simulated_cpu.get_flags())
+    }
+}
+
+impl Default for ARMSimulator {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -13,12 +13,12 @@ pub enum ARMv5FlagNames {
 impl<T> Index<ARMv5FlagNames> for [T] {
     type Output = T;
     fn index(&self, index: ARMv5FlagNames) -> &Self::Output {
-        return &self[index as usize];
+        &self[index as usize]
     }
 }
 impl<T> IndexMut<ARMv5FlagNames> for [T] {
     fn index_mut(&mut self, index: ARMv5FlagNames) -> &mut Self::Output {
-        return &mut self[index as usize];
+        &mut self[index as usize]
     }
 }
 
@@ -34,12 +34,12 @@ pub enum ARMv5RegNames {
 impl<T> Index<ARMv5RegNames> for [T] {
     type Output = T;
     fn index(&self, index: ARMv5RegNames) -> &Self::Output {
-        return &self[index as usize];
+        &self[index as usize]
     }
 }
 impl<T> IndexMut<ARMv5RegNames> for [T] {
     fn index_mut(&mut self, index: ARMv5RegNames) -> &mut Self::Output {
-        return &mut self[index as usize];
+        &mut self[index as usize]
     }
 }
 impl ARMv5RegNames {

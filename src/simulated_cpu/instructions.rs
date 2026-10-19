@@ -838,7 +838,7 @@ impl ARMv5CPU {
         let mut address: u32 = self.compute_modify_address(am);
 
         // do this only if unaligned access flag is 0 (maybe only in ARMv6 but need to check)
-        let rot_bits: u32 = (address as u32).cut_bits(0..=1) * 8;
+        let rot_bits: u32 = address.cut_bits(0..=1) * 8;
         address &= 0xFFFFFFFC;
 
         //rotation can be done directly here
@@ -960,18 +960,18 @@ impl ARMv5CPU {
 
         let mut values: [u32; 16] = [0; 16];
 
-        for i in 0..16 {
+        for (i, value) in values.iter_mut().enumerate() {
             if amm.register_list.get_bit(i) {
                 let address: u32 = addresses.remove(0) & 0xFFFFFFFC;
                 let bytes: &[u8] = self.get_memory(address, 4)?;
-                values[i] = slice_to_u32(bytes, &self.encoding);
+                *value = slice_to_u32(bytes, &self.encoding);
             }
         }
         values[15] &= 0xFFFFFFFE; //set T bit when LSB is 1
-        for i in 0..16 {
+        for (i, value) in values.iter().enumerate() {
             if amm.register_list.get_bit(i) {
                 let reg_name: ARMv5RegNames = (i as u32).into();
-                self.set_register_intern(reg_name, values[i] as i32);
+                self.set_register_intern(reg_name, *value as i32);
             }
         }
         Ok(CpuEvent::None)
@@ -1473,7 +1473,7 @@ mod tests {
         smlal_test_3: 
             (2, -85, 170, 0, T, 0, 0, [F, T, F, F]),
         smlal_test_4: 
-            (-042003, 300160, 8838, -3729, T, 277290246, -3732, [T, F, F, F]),
+            (-42003, 300160, 8838, -3729, T, 277290246, -3732, [T, F, F, F]),
         smlal_test_5: 
             (729276, -937263, 76, 120, F, -623611448, -40, [F; 4])
     }

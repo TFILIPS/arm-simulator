@@ -121,9 +121,9 @@ impl SimulatedCPU for ARMv5CPU {
             }
 
             // The caller makes sure that the range is in memory
-            let bytes: &[u8] = &self.get_memory(address, 4)
+            let bytes: &[u8] = self.get_memory(address, 4)
                 .expect("Memory access out of bounds!");
-            let bits: u32 = slice_to_u32(&bytes, &self.encoding);
+            let bits: u32 = slice_to_u32(bytes, &self.encoding);
 
             let instruction: ARMv5Instruction = ARMv5Decoder::decode(bits);
 

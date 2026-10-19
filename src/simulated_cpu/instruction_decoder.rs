@@ -72,10 +72,9 @@ impl ARMv5Decoder {
                     return ARMv5Decoder::synchronization(inst_bits);
                 }
             }
-            else if bm(op2, 0b1111, 0b1011) || bm(op2, 0b1101, 0b1101) {
-                if !bm(op1, 0b10010, 0b00010) {
-                    return ARMv5Decoder::extra_load_store(inst_bits);
-                }
+            else if (bm(op2, 0b1111, 0b1011) || bm(op2, 0b1101, 0b1101)) 
+                && !bm(op1, 0b10010, 0b00010) {
+                return ARMv5Decoder::extra_load_store(inst_bits);
             }
         }
         else {
@@ -854,7 +853,7 @@ mod tests {
                         p: true, u: true, w: true,
                         rn: ARMv5RegNames::R3, 
                         offset_type: OffsetType::Immediate { 
-                            offset: 03583
+                            offset: 3583
                         }
                     }
                 }

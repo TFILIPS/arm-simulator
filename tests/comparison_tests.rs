@@ -2,7 +2,6 @@ extern crate arm_simulator;
 
 use std::{fs::{File, read_to_string}, io::BufReader};
 use serde::{Deserialize, Serialize};
-use serde_json;
 
 use arm_simulator::{ARMSimulator, SimulationEvent, ARMv5RegNames};
 
