@@ -120,7 +120,7 @@ impl SimulatedCPU for ARMv5CPU {
                 writeln!(buffer, "-------- | {label}:").unwrap();
             }
 
-            // ToDo: Better error handling
+            // The caller makes sure that the range is in memory
             let bytes: &[u8] = &self.get_memory(address, 4)
                 .expect("Memory access out of bounds!");
             let bits: u32 = slice_to_u32(&bytes, &self.encoding);

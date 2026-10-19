@@ -17,8 +17,6 @@ pub trait Instruction<C: SimulatedCPU>: Display {
     fn execute(&self, cpu: &mut C) -> Result<CpuEvent, SimulationExceptionKind>;
 }
 
-// Todo: Remove Clone and Copy from all enums where its possible and rent values
-
 #[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Condition { 
@@ -547,7 +545,6 @@ impl ARMv5CPU {
 
         self.flags[ARMv5FlagNames::N] = result < 0;
         self.flags[ARMv5FlagNames::Z] = result == 0;
-        // TODO: check with Alex if this is correct
         self.flags[ARMv5FlagNames::C] = (result as u32) <= (a as u32);
         self.flags[ARMv5FlagNames::V] = overflow;
 
@@ -839,7 +836,7 @@ impl ARMv5CPU {
         address &= 0xFFFFFFFC;
 
         //rotation can be done directly here
-        let bytes: &[u8] = self.get_memory(address, 4)?; //&self.memory[address..address+4];
+        let bytes: &[u8] = self.get_memory(address, 4)?;
         let mut value: u32 = slice_to_u32(bytes, &self.encoding);
         value = value.rotate_right(rot_bits);
 
@@ -870,7 +867,7 @@ impl ARMv5CPU {
         &mut self, rd: ARMv5RegNames, am: AddressingMode
     ) -> Result<CpuEvent, SimulationExceptionKind> {
         let address: u32 = self.compute_modify_address(am);
-        let bytes: &[u8] = self.get_memory(address, 2)?; //&self.memory[address..address+2];
+        let bytes: &[u8] = self.get_memory(address, 2)?;
         let value: u32 = slice_to_u16(bytes, &self.encoding) as u32;
         self.set_register_intern(rd, value as i32);
         Ok(CpuEvent::None)
@@ -889,7 +886,7 @@ impl ARMv5CPU {
         &mut self, rd: ARMv5RegNames, am: AddressingMode
     ) -> Result<CpuEvent, SimulationExceptionKind> {
         let address: u32 = self.compute_modify_address(am);
-        let bytes: &[u8] = self.get_memory(address, 2)?;//&self.memory[address..address+2];
+        let bytes: &[u8] = self.get_memory(address, 2)?;
         let value: i32 = slice_to_u16(bytes, &self.encoding) as i16 as i32;
         self.set_register_intern(rd, value);
         Ok(CpuEvent::None)
@@ -920,7 +917,6 @@ impl ARMv5CPU {
         let address: u32 = self.compute_modify_address(am);
         let value: u8 = self.get_register_intern(rd) as u8;
 
-        //self.memory[address] = value;
         self.set_memory(address, &[value])?;
         Ok(CpuEvent::None)
     }
@@ -939,7 +935,6 @@ impl ARMv5CPU {
         let value: u16 = self.get_register_intern(rd) as u16;
         let bytes: [u8; 2] = u16_to_array(value, &self.encoding);
         
-        //self.memory.splice(address..address+2, bytes);
         self.set_memory(address, &bytes)?;
         Ok(CpuEvent::None)
     }
@@ -950,7 +945,7 @@ impl ARMv5CPU {
         self.str(rd, am)
     }
 
-    //do not change any register if data abort (better then specification)
+    //do not change any register if data abort (better than the specification)
     fn ldm(
         &mut self, amm: AddressingModeMultiple
     ) -> Result<CpuEvent, SimulationExceptionKind> {
@@ -962,7 +957,7 @@ impl ARMv5CPU {
         for i in 0..16 {
             if amm.register_list.get_bit(i) {
                 let address: u32 = addresses.remove(0) & 0xFFFFFFFC;
-                let bytes: &[u8] = self.get_memory(address, 4)?; //&self.memory[address..address+4];
+                let bytes: &[u8] = self.get_memory(address, 4)?;
                 values[i] = slice_to_u32(bytes, &self.encoding);
             }
         }

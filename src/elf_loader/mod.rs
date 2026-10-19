@@ -56,7 +56,7 @@ impl ELFFile {
 
     pub fn load_raw(raw_data: Vec<u8>) -> Result<Self, &'static str> {
         if raw_data.len() < ELFHeader::SIZE {
-            return Err("ELF file is to short to be valid!");
+            return Err("ELF file is too short to be valid!");
         }
 
         let (elf_header, encoding) =
@@ -143,6 +143,8 @@ impl ELFFile {
             .ok_or("Section name table not found! Check ELF file.")?;
         let str_table: &[u8] = self.load_string_table(str_header)?;
 
+        // ELF files can have several .text sections, but the programs for
+        // this simulator have one. Only the first one is used.
         for header in &headers {
             if let Some(name) = get_string(str_table, header.section_name) {
                 if name == ".text" {
@@ -153,10 +155,6 @@ impl ELFFile {
                     let end: u32 = header.address.checked_add(header.size)
                         .ok_or("Error while reading .text section! Check ELF file.")?;
                     return Ok((header.address, end));
-                    // ALEX: can we have multilpe .text sections?
-                    // The specification says yes. But I don't think this will
-                    // happen in our use cases. Definitely a thing to keep in
-                    // mind though.
                 }
             }
         }
@@ -181,7 +179,7 @@ impl ELFFile {
                 Err("The ELF file is not 32-bit compatible!")
             },
             Err(ValueError::OsAbi) => {
-                Err("The ELF files traget is not Unix-SystemV!")
+                Err("The target of the ELF file is not Unix-SystemV!")
             }
             Ok(_) => Ok(())
         }

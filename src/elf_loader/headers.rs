@@ -31,7 +31,6 @@ impl ELFHeader {
             Err("The provided ELF file is too short to be valid!")
         )?;
 
-        // Why the change from elf_id to bytes? (Alex)
         if elf_id[0..4] != ELF_ID || elf_id[6] != HEADER_VERSION_KEY {
             return Err("The ELF file is not valid!");
         }
@@ -71,7 +70,6 @@ impl ELFHeader {
         class: u8,
         os_abi: u8
     ) -> Result<(), ValueError> {
-        // ToDo: Custom error type: [https://stackoverflow.com/questions/42584368/how-do-you-define-custom-error-types-in-rust]
         if self.elf_version != elf_version {
             return Err(ValueError::Version);
         }

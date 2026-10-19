@@ -12,7 +12,6 @@ pub trait InstructionDecoder<I: Instruction<C>, C: SimulatedCPU> {
 }
 
 // ToDo: Refactor condition
-// ToDo: Try to use memorization (not working)
 //https://developer.arm.com/documentation/ddi0406/c/Application-Level-Architecture/ARM-Instruction-Set-Encoding/ARM-instruction-set-encoding?lang=en
 pub struct ARMv5Decoder;
 impl InstructionDecoder<ARMv5Instruction, ARMv5CPU> for ARMv5Decoder {

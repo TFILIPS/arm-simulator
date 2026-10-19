@@ -341,7 +341,7 @@ mod tests {
     fn invalid_elf_file_is_elf_error() {
         let mut sim = ARMSimulator::new();
         let error: ElfError = sim.load_elf_bytes(vec![0; 10]).unwrap_err();
-        assert_eq!("ELF file is to short to be valid!", error.to_string());
+        assert_eq!("ELF file is too short to be valid!", error.to_string());
     }
 
     #[test]
