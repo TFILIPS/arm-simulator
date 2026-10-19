@@ -10,7 +10,7 @@ pub use elf_loader::ElfError;
 pub use simulated_cpu::{
     SimulationEvent, SimulationException, SimulationExceptionKind, names::ARMv5RegNames
 };
-pub use utils::MemoryException;
+pub use utils::MemoryError;
 
 mod elf_loader;
 mod simulated_cpu;
@@ -133,11 +133,11 @@ impl ARMSimulator {
         self.simulated_cpu.set_flag(flag, value);
     }
 
-    pub fn get_memory(&self, address: u32, size: u32) -> Result<Vec<u8>, MemoryException> {
+    pub fn get_memory(&self, address: u32, size: u32) -> Result<Vec<u8>, MemoryError> {
         self.simulated_cpu.get_memory(address, size).map(Vec::from)
     }
 
-    pub fn set_memory(&mut self, address: u32, bytes: &[u8]) -> Result<(), MemoryException> {
+    pub fn set_memory(&mut self, address: u32, bytes: &[u8]) -> Result<(), MemoryError> {
         self.simulated_cpu.set_memory(address, bytes)
     }
 
@@ -168,8 +168,8 @@ impl From<ElfError> for JsValue {
         JsError::new(&error.to_string()).into()
     }
 }
-impl From<MemoryException> for JsValue {
-    fn from(error: MemoryException) -> Self {
+impl From<MemoryError> for JsValue {
+    fn from(error: MemoryError) -> Self {
         JsError::new(&error.to_string()).into()
     }
 }

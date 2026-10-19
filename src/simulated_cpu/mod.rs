@@ -1,6 +1,6 @@
 use std::{io::Write, collections::HashMap, error::Error, fmt::Display};
 
-use crate::utils::{Endian, slice_to_u32, byte_count, Memory, MemoryException};
+use crate::utils::{Endian, slice_to_u32, byte_count, Memory, MemoryError};
 
 use instructions::{Instruction, ARMv5Instruction};
 use names::{ARMv5RegNames, ARMv5FlagNames};
@@ -43,8 +43,8 @@ pub enum SimulationExceptionKind {
     UnsupportedInstruction{reason: &'static str}, 
     UnsupportedSyscall{number: i32}
 }
-impl From<MemoryException> for SimulationExceptionKind {
-    fn from(value: MemoryException) -> Self {
+impl From<MemoryError> for SimulationExceptionKind {
+    fn from(value: MemoryError) -> Self {
         SimulationExceptionKind::DataAbort { 
             memory_address: value.address, 
             size: value.size 
@@ -164,7 +164,7 @@ impl SimulatedCPU for ARMv5CPU {
 impl Memory for ARMv5CPU {
     fn get_memory(
         &self, address: u32, size: u32
-    ) -> Result<&[u8], MemoryException> {
+    ) -> Result<&[u8], MemoryError> {
         let (start, end): (usize, usize) = 
             ARMv5CPU::check_memory_access_get_boundaries(address, size)?;
 
@@ -173,7 +173,7 @@ impl Memory for ARMv5CPU {
 
     fn set_memory(
         &mut self, address: u32, bytes: &[u8]
-    ) -> Result<(), MemoryException> {
+    ) -> Result<(), MemoryError> {
         let size: u32 = bytes.len() as u32;
         let (start, end): (usize, usize) = 
             ARMv5CPU::check_memory_access_get_boundaries(address, size)?;
@@ -227,7 +227,7 @@ impl ARMv5CPU {
 
     fn check_memory_access_get_boundaries(
         address: u32, size: u32
-    ) -> Result<(usize, usize), MemoryException> {
+    ) -> Result<(usize, usize), MemoryError> {
         let start: usize = address as usize;
         if let Some(end) = address.checked_add(size) {
             let end: usize = end as usize;
@@ -235,7 +235,7 @@ impl ARMv5CPU {
                 return Ok((start, end));
             }
         }
-        Err(MemoryException { address, size })
+        Err(MemoryError { address, size })
     }
 
     fn load_and_execute_instruction(
@@ -269,7 +269,7 @@ impl ARMv5CPU {
 
 #[cfg(test)]
 mod tests {
-    use crate::utils::{Memory, MemoryException};
+    use crate::utils::{Memory, MemoryError};
     use super::{
         SimulatedCPU, ARMv5CPU, SimulationException, SimulationExceptionKind,
         names::ARMv5RegNames
@@ -334,10 +334,10 @@ mod tests {
     }
 
     #[test]
-    fn memory_exception_reports_access() {
+    fn memory_error_reports_access() {
         let cpu = ARMv5CPU::new();
         assert_eq!(
-            Err(MemoryException { address: 0x3FF_FFFE, size: 4 }), 
+            Err(MemoryError { address: 0x3FF_FFFE, size: 4 }), 
             cpu.get_memory(0x3FF_FFFE, 4)
         );
     }
