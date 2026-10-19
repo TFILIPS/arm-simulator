@@ -10,7 +10,7 @@ pub use simulated_cpu::{SimulationEvent, SimulationException, names::ARMv5RegNam
 
 mod elf_loader;
 mod simulated_cpu;
-pub mod utils;
+mod utils;
 
 const DEFAULT_STACK_POINTER: u32 = 0x40000;
 

@@ -1,4 +1,4 @@
-use std::{error::Error, ops::{Bound, RangeBounds}, process::exit};
+use std::{error::Error, ops::{Bound, RangeBounds}};
 
 pub const F: bool = false;
 pub const T: bool = true;
@@ -115,47 +115,6 @@ fn get_bounds<T: RangeBounds<usize>>(range: T, max: usize) -> (usize, usize) {
     (start, end)
 }
 
-pub trait OutputDevice {
-    fn output(&mut self, bytes: &[u8]);
-    fn output_err(&mut self, bytes: &[u8]);
-    fn flush(&mut self);
-}
-
-pub struct ConsoleOutput {
-    output_buffer: Vec<u8>,
-    error_buffer: Vec<u8>
-}
-impl OutputDevice for ConsoleOutput {
-    fn output(&mut self, bytes: &[u8]) {
-        self.output_buffer.extend(bytes);
-        if let Ok(string) = &String::from_utf8(self.output_buffer.clone()) {
-            print!("{string}");
-            self.output_buffer.clear();
-        }
-    }
-    fn output_err(&mut self, bytes: &[u8]) {
-        self.error_buffer.extend(bytes);
-        if let Ok(string) = &String::from_utf8(self.error_buffer.clone()) {
-            eprint!("{string}");
-            self.error_buffer.clear();
-        }
-    }
-    fn flush(&mut self) {
-        print!("{}", String::from_utf8_lossy(&self.output_buffer));
-        self.output_buffer.clear();
-        eprint!("{}", String::from_utf8_lossy(&self.error_buffer));
-        self.error_buffer.clear();
-    }
-}
-impl ConsoleOutput {
-    pub fn new() -> ConsoleOutput {
-        ConsoleOutput {
-            output_buffer: Vec::new(),
-            error_buffer: Vec::new()
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct MemoryException {
     pub address: usize, pub size: usize, pub msg: String
@@ -182,17 +141,4 @@ pub trait Memory {
     fn set_memory(
         &mut self, address: u32, bytes: &[u8]
     ) -> Result<(), MemoryException>;
-}
-
-pub trait ExitOnError<T> {
-    fn unwrap_or_exit(self) -> T;
-}
-
-impl<T> ExitOnError<T> for Result<T, &'static str> {
-    fn unwrap_or_exit(self) -> T {
-        self.unwrap_or_else(|msg| {
-            eprintln!("{msg}");
-            exit(1);
-        })
-    }
 }

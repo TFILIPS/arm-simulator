@@ -1,33 +1,30 @@
-use std::{env, process::exit};
+use std::{env, io::{self, Write}, process::exit};
 
-use arm_simulator::{
-    utils::{ConsoleOutput, ExitOnError, OutputDevice}, ARMSimulator, SimulationEvent, SimulationException
-};
+use arm_simulator::{ARMSimulator, SimulationEvent, SimulationException};
 
 fn main() {
     let (path, disassemble): (String, bool) = parse_arguments();
 
-    let mut output_device: ConsoleOutput = ConsoleOutput::new();
     let mut simulator: ARMSimulator = ARMSimulator::new();
     simulator.load_elf_file(&path).unwrap_or_exit();
 
     if disassemble {
-        let disassembly:String = simulator.get_disassembly().unwrap_or_exit();
-        print!("{disassembly}");
+        let disassembly: String = simulator.get_disassembly().unwrap_or_exit();
+        write_unbuffered(io::stdout(), disassembly.as_bytes());
     }
     else {
         loop {
             match simulator.step() {
-                Ok(SimulationEvent::ConsoleOutput { stream, message }) => {
-                    if stream == 1 { output_device.output(&message) }
-                    else if stream == 2 { output_device.output_err(&message) }
+                Ok(SimulationEvent::ConsoleOutput { stream: 1, message }) => {
+                    write_unbuffered(io::stdout(), &message);
+                },
+                Ok(SimulationEvent::ConsoleOutput { stream: 2, message }) => {
+                    write_unbuffered(io::stderr(), &message);
                 },
                 Ok(SimulationEvent::Exit { exit_code }) => {
-                    output_device.flush();
                     exit(exit_code);
                 },
                 Err(SimulationException { msg, .. }) => {
-                    output_device.flush();
                     eprintln!("{msg}");
                     exit(1);
                 },
@@ -37,10 +34,16 @@ fn main() {
     }
 }
 
+// Like the write system call: the bytes are passed on unchanged and errors
+// (e.g. a closed pipe) do not stop the simulation
+fn write_unbuffered(mut stream: impl Write, bytes: &[u8]) {
+    let _ = stream.write_all(bytes).and_then(|_| stream.flush());
+}
+
 fn parse_arguments() -> (String, bool) {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 || args.len() > 3 {
-        println!("Usage: ./{:} path_to_executable [--disassemble]", args[0]);
+        eprintln!("Usage: {} path_to_executable [-d | --disassemble]", args[0]);
         exit(1);
     }
     let mut path: String = String::new();
@@ -57,4 +60,17 @@ fn parse_arguments() -> (String, bool) {
         }
     }
     (path, disassemble)
+}
+
+trait ExitOnError<T> {
+    fn unwrap_or_exit(self) -> T;
+}
+
+impl<T> ExitOnError<T> for Result<T, &'static str> {
+    fn unwrap_or_exit(self) -> T {
+        self.unwrap_or_else(|msg| {
+            eprintln!("{msg}");
+            exit(1);
+        })
+    }
 }
