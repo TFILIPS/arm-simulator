@@ -284,13 +284,15 @@ impl Display for ARMv5Instruction {
                     ARMv5DataProcessingOperation::TST |
                     ARMv5DataProcessingOperation::TEQ |
                     ARMv5DataProcessingOperation::CMP |
-                    ARMv5DataProcessingOperation::CMN |
+                    ARMv5DataProcessingOperation::CMN => write!(
+                        f, "{:?}{cond} {rn}, {so}", op
+                    ),
                     ARMv5DataProcessingOperation::MOV |
                     ARMv5DataProcessingOperation::MVN => write!(
-                        f, "{:?}{cond} {rd}, {so}", op
+                        f, "{:?}{cond}{s} {rd}, {so}", op
                     ),
                     _ => write!(
-                        f, "{:?}{s}{cond} {rd}, {rn}, {so}", op
+                        f, "{:?}{cond}{s} {rd}, {rn}, {so}", op
                     )
                 }
             },
@@ -298,10 +300,10 @@ impl Display for ARMv5Instruction {
                 let s: &str = if *s {"S"} else {""};
                 match op {
                     ARMv5MultiplyOperation::MUL => write!(
-                        f, "{:?}{s}{cond} {rd_hi}, {rm}, {rs}", op
+                        f, "{:?}{cond}{s} {rd_hi}, {rm}, {rs}", op
                     ),
                     ARMv5MultiplyOperation::MLA => write!(
-                        f, "{:?}{s}{cond} {rd_hi}, {rm}, {rs}, {rn_lo}", op
+                        f, "{:?}{cond}{s} {rd_hi}, {rm}, {rs}, {rn_lo}", op
                     ),
                     _ => write!(
                         f, "{:?}{cond}{s} {rd_hi}, {rn_lo}, {rm}, {rs}", op
