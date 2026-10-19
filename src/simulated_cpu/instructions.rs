@@ -1921,6 +1921,14 @@ mod tests {
     }
 
     #[test]
+    fn condition_before_s_flag_in_disassembly() {
+        assert_eq!("CMP R1, R2", ARMv5Decoder::decode(0xE151_0002).to_string());
+        assert_eq!("MOVEQS R0, #1", ARMv5Decoder::decode(0x03B0_0001).to_string());
+        assert_eq!("ADDNES R0, R1, R2", ARMv5Decoder::decode(0x1091_0002).to_string());
+        assert_eq!("MULEQS R0, R1, R2", ARMv5Decoder::decode(0x0010_0291).to_string());
+    }
+
+    #[test]
     fn bkpt_is_breakpoint() {
         let mut cpu = ARMv5CPU::new();
         let instruction: ARMv5Instruction = ARMv5Decoder::decode(0xE12A_5373);
