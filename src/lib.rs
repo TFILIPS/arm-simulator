@@ -26,7 +26,10 @@ pub enum SimulationEvent {
     None,
     Breakpoint,
     Exit{exit_code: i32},
-    ConsoleOutput{stream: i32, message: Vec<u8>}
+    ConsoleOutput{stream: i32, message: Vec<u8>},
+    // A read found no input. The PC stays at the SWI, so the system call
+    // runs again when the program continues after push_input or close_input.
+    WaitingForInput
 }
 
 pub struct ARMSimulator {
@@ -35,7 +38,8 @@ pub struct ARMSimulator {
     dynamic_breakpoints: HashSet<u32>,
     // Breakpoint the last run stopped at. Resuming from it must not stop
     // again right away. Executing any instruction clears it.
-    stopped_at_breakpoint: Option<u32>
+    stopped_at_breakpoint: Option<u32>,
+    input: os::Input
 }
 impl ARMSimulator {
     pub fn new() -> ARMSimulator {
@@ -43,7 +47,8 @@ impl ARMSimulator {
             elf_file: None,
             simulated_cpu: ARMv5CPU::new(), 
             dynamic_breakpoints: HashSet::new(),
-            stopped_at_breakpoint: None
+            stopped_at_breakpoint: None,
+            input: os::Input::default()
         }
     }
  
@@ -72,11 +77,21 @@ impl ARMSimulator {
             CpuEvent::None => Ok(SimulationEvent::None),
             CpuEvent::Breakpoint => Ok(SimulationEvent::Breakpoint),
             CpuEvent::SoftwareInterrupt { .. } => {
-                os::handle_syscall(&mut self.simulated_cpu).map_err(|kind| {
-                    // Like for other exceptions the PC stays at the instruction
-                    self.simulated_cpu.set_register(ARMv5RegNames::PC, address as i32);
-                    SimulationException { address, kind }
-                })
+                match os::handle_syscall(&mut self.simulated_cpu, &mut self.input) {
+                    Ok(SimulationEvent::WaitingForInput) => {
+                        // Like a blocked process: the SWI runs again later.
+                        // A breakpoint on it was already passed.
+                        self.simulated_cpu.set_register(ARMv5RegNames::PC, address as i32);
+                        self.stopped_at_breakpoint = Some(address);
+                        Ok(SimulationEvent::WaitingForInput)
+                    },
+                    Ok(event) => Ok(event),
+                    Err(kind) => {
+                        // Like for other exceptions the PC stays at the instruction
+                        self.simulated_cpu.set_register(ARMv5RegNames::PC, address as i32);
+                        Err(SimulationException { address, kind })
+                    }
+                }
             }
         }
     }
@@ -161,9 +176,24 @@ impl ARMSimulator {
         self.dynamic_breakpoints.remove(&address);
     }
 
+    // Input for the program (stdin), read by the read system call
+    pub fn push_input(&mut self, bytes: &[u8]) {
+        self.input.push(bytes);
+    }
+
+    // End of input (EOF): reads return 0 once the remaining input is read
+    pub fn close_input(&mut self) {
+        self.input.close();
+    }
+
+    pub fn is_input_closed(&self) -> bool {
+        self.input.is_closed()
+    }
+
     pub fn reload_simulator(&mut self) -> Result<(), ElfError> {  
         self.simulated_cpu.reset();
         self.stopped_at_breakpoint = None;
+        self.input.clear();
         self.simulated_cpu.set_register(ARMv5RegNames::SP, DEFAULT_STACK_POINTER as i32);
         if let Some(elf) = &self.elf_file {
             self.simulated_cpu.set_encoding(elf.get_encoding());
@@ -189,6 +219,97 @@ mod tests {
 
     // 32-bit little endian ARM executable
     const HALLO: &[u8] = include_bytes!("../sample_programs/hallo");
+    // Echoes its input: read(0, 0x2000, 64) and write the bytes back to
+    // stdout, until read returns 0 at the end of input, then exit(0)
+    const ECHO: [u32; 15] = [
+        0xE3A0_0000, // 0x1000: mov r0, #0
+        0xE3A0_1A02, // 0x1004: mov r1, #0x2000
+        0xE3A0_2040, // 0x1008: mov r2, #64
+        0xE3A0_7003, // 0x100C: mov r7, #3
+        0xEF00_0000, // 0x1010: swi #0           read
+        0xE350_0000, // 0x1014: cmp r0, #0
+        0xDA00_0004, // 0x1018: ble 0x1030
+        0xE1A0_2000, // 0x101C: mov r2, r0
+        0xE3A0_0001, // 0x1020: mov r0, #1
+        0xE3A0_7004, // 0x1024: mov r7, #4
+        0xEF00_0000, // 0x1028: swi #0           write
+        0xEAFF_FFF3, // 0x102C: b 0x1000
+        0xE3A0_0000, // 0x1030: mov r0, #0
+        0xE3A0_7001, // 0x1034: mov r7, #1
+        0xEF00_0000, // 0x1038: swi #0           exit
+    ];
+    // Address of its read system call
+    const READ_SWI: u32 = 0x1010;
+
+    fn load_echo(sim: &mut ARMSimulator) {
+        let bytes: Vec<u8> = ECHO.iter().flat_map(|i| i.to_le_bytes()).collect();
+        sim.set_memory(0x1000, &bytes).unwrap();
+        sim.set_register(ARMv5RegNames::PC, 0x1000);
+    }
+
+    pub(crate) fn echo_simulator() -> ARMSimulator {
+        let mut sim = ARMSimulator::new();
+        load_echo(&mut sim);
+        sim
+    }
+
+    // Runs until something else than output happens, collects the output
+    fn run_collecting(sim: &mut ARMSimulator, output: &mut Vec<u8>) -> SimulationEvent {
+        loop {
+            match sim.multiple_steps(10_000).unwrap() {
+                SimulationEvent::ConsoleOutput { message, .. } => output.extend(message),
+                event => return event
+            }
+        }
+    }
+
+    #[test]
+    fn read_waits_at_swi_until_input() {
+        let mut sim = echo_simulator();
+        let mut output: Vec<u8> = Vec::new();
+
+        assert!(matches!(run_collecting(&mut sim, &mut output), SimulationEvent::WaitingForInput));
+        assert_eq!(READ_SWI, sim.get_program_counter());
+        // Running again without input keeps waiting at the same instruction
+        assert!(matches!(run_collecting(&mut sim, &mut output), SimulationEvent::WaitingForInput));
+        assert_eq!(READ_SWI, sim.get_program_counter());
+
+        sim.push_input(b"ab1c\nxyz\n");
+        assert!(matches!(run_collecting(&mut sim, &mut output), SimulationEvent::WaitingForInput));
+        assert_eq!(b"ab1c\nxyz\n".to_vec(), output);
+
+        sim.close_input();
+        assert!(matches!(run_collecting(&mut sim, &mut output), SimulationEvent::Exit { exit_code: 0 }));
+    }
+
+    #[test]
+    fn breakpoint_on_waiting_read_does_not_stop_again() {
+        let mut sim = echo_simulator();
+        let mut output: Vec<u8> = Vec::new();
+        sim.add_breakpoint(READ_SWI);
+
+        assert!(matches!(run_collecting(&mut sim, &mut output), SimulationEvent::Breakpoint));
+        assert!(matches!(run_collecting(&mut sim, &mut output), SimulationEvent::WaitingForInput));
+        sim.push_input(b"a\n");
+        // The read completes; the next loop iteration reaches the breakpoint again
+        assert!(matches!(run_collecting(&mut sim, &mut output), SimulationEvent::Breakpoint));
+        assert_eq!(b"a\n".to_vec(), output);
+    }
+
+    #[test]
+    fn reload_clears_input() {
+        let mut sim = echo_simulator();
+        sim.push_input(b"old\n");
+        sim.close_input();
+        sim.reload_simulator().unwrap();
+        assert!(!sim.is_input_closed());
+
+        // Without an ELF file the reload also cleared the program
+        load_echo(&mut sim);
+        let mut output: Vec<u8> = Vec::new();
+        assert!(matches!(run_collecting(&mut sim, &mut output), SimulationEvent::WaitingForInput));
+        assert!(output.is_empty());
+    }
 
     // 0x1000: mov r0, r0
     // 0x1004: mov r0, r0   <- breakpoint

@@ -1,4 +1,4 @@
-use std::{env, fmt::Display, io::{self, Write}, process::exit};
+use std::{env, fmt::Display, io::{self, BufRead, Write}, process::exit};
 
 use arm_simulator::{ARMSimulator, SimulationEvent};
 
@@ -23,6 +23,14 @@ fn main() {
                 },
                 Ok(SimulationEvent::Exit { exit_code }) => {
                     exit(exit_code);
+                },
+                Ok(SimulationEvent::WaitingForInput) => {
+                    // Like a terminal: one line of stdin per read, then end of input
+                    let mut line: Vec<u8> = Vec::new();
+                    match io::stdin().lock().read_until(b'\n', &mut line) {
+                        Ok(0) | Err(_) => simulator.close_input(),
+                        Ok(_) => simulator.push_input(&line)
+                    }
                 },
                 Err(exception) => {
                     eprintln!("{exception}");

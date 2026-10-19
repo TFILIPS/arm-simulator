@@ -17,7 +17,9 @@ pub enum StopReason {
     None,
     Breakpoint,
     Exit,
-    Error
+    Error,
+    // A read system call waits for push_input or close_input
+    WaitingForInput
 }
 
 #[wasm_bindgen]
@@ -161,6 +163,20 @@ impl WasmSimulator {
         StopReason::None
     }
 
+    // Input for the program (stdin), e.g. a line typed by the user with its "\n"
+    pub fn push_input(&mut self, text: &str) {
+        self.simulator.push_input(text.as_bytes());
+    }
+
+    // End of input (EOF), like Ctrl+D in a terminal
+    pub fn close_input(&mut self) {
+        self.simulator.close_input();
+    }
+
+    pub fn is_input_closed(&self) -> bool {
+        self.simulator.is_input_closed()
+    }
+
     // Output of the program since the last call, in the order it was written
     pub fn take_output(&mut self) -> Vec<OutputChunk> {
         self.output.take()
@@ -250,6 +266,7 @@ impl WasmSimulator {
                 StopReason::None
             },
             Ok(SimulationEvent::Breakpoint) => StopReason::Breakpoint,
+            Ok(SimulationEvent::WaitingForInput) => StopReason::WaitingForInput,
             Ok(SimulationEvent::Exit { exit_code }) => {
                 self.output.flush();
                 self.exit_code = Some(exit_code);
@@ -394,6 +411,22 @@ mod tests {
         output.push(2, &[0xC3]);
         output.flush();
         assert_eq!(vec![chunk(2, "\u{FFFD}")], output.take());
+    }
+
+    #[test]
+    fn run_waits_for_input() {
+        let mut sim = WasmSimulator::from_simulator(crate::tests::echo_simulator());
+
+        assert_eq!(StopReason::WaitingForInput, sim.run(1000));
+        sim.push_input("grüße\n");
+        assert_eq!(StopReason::WaitingForInput, sim.run(1000));
+        // The program echoes the bytes, "ü" and "ß" arrive as UTF-8 again
+        assert_eq!(vec![chunk(1, "grüße\n")], sim.take_output());
+
+        sim.close_input();
+        assert!(sim.is_input_closed());
+        assert_eq!(StopReason::Exit, sim.run(1000));
+        assert_eq!(Some(0), sim.exit_code());
     }
 
     #[test]
