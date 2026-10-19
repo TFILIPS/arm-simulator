@@ -1000,17 +1000,17 @@ impl ARMv5CPU {
     fn swp(
         &mut self, rn: ARMv5RegNames, rd: ARMv5RegNames, rm: ARMv5RegNames
     ) -> Result<SimulationEvent, SimulationException> {
-        let mut address: usize = self.get_register_intern(rn) as u32 as usize;
-        let rot_bits: u32 = (address as u32).cut_bits(0..=1) * 8;
+        let mut address: u32 = self.get_register_intern(rn) as u32;
+        let rot_bits: u32 = address.cut_bits(0..=1) * 8;
         address &= 0xFFFFFFFC;
 
-        let bytes: &[u8] = &self.memory[address..address+4];
+        let bytes: &[u8] = self.get_memory(address, 4)?;
         let mut lv: u32 = slice_to_u32(bytes, &self.encoding);
         lv = lv.rotate_right(rot_bits);
 
         let sv: u32 = self.get_register_intern(rm) as u32;
         let bytes: [u8; 4] = u32_to_array(sv, &self.encoding);
-        self.memory.splice(address..address+4, bytes);
+        self.set_memory(address, &bytes)?;
         self.set_register_intern(rd, lv as i32);
         Ok(SimulationEvent::None)
     }
@@ -1018,12 +1018,12 @@ impl ARMv5CPU {
     fn swpb(
         &mut self, rn: ARMv5RegNames, rd: ARMv5RegNames, rm: ARMv5RegNames
     ) -> Result<SimulationEvent, SimulationException> {
-        let address: usize = self.get_register_intern(rn) as u32 as usize;
+        let address: u32 = self.get_register_intern(rn) as u32;
 
-        let lv: u8 = self.memory[address];
+        let lv: u8 = self.get_memory(address, 1)?[0];
         let sv: u8 = self.get_register_intern(rm) as u8;
         
-        self.memory[address] = sv;
+        self.set_memory(address, &[sv])?;
         self.set_register_intern(rd, lv as i32);
         Ok(SimulationEvent::None)
     }
@@ -1037,12 +1037,12 @@ impl ARMv5CPU {
             },
             4 => {
                 let stream: i32 = self.get_register_intern(ARMv5RegNames::R0);
-                let l: usize = 
-                    self.get_register_intern(ARMv5RegNames::R2) as u32 as usize;
-                let a: usize = 
-                    self.get_register_intern(ARMv5RegNames::R1) as u32 as usize;
+                let address: u32 = 
+                    self.get_register_intern(ARMv5RegNames::R1) as u32;
+                let length: u32 = 
+                    self.get_register_intern(ARMv5RegNames::R2) as u32;
 
-                let message: Vec<u8> = self.memory[a..a+l].to_vec();
+                let message: Vec<u8> = self.get_memory(address, length)?.to_vec();
                 return Ok(SimulationEvent::ConsoleOutput{stream, message});
             },
             _ => ()
@@ -1148,6 +1148,7 @@ mod tests {
     use crate::utils::{T, F, Endian};
     use crate::simulated_cpu::{
         SimulatedCPU, ARMv5CPU, ARMv5RegNames, ARMv5FlagNames, 
+        SimulationEvent, SimulationException, SimulationExceptionKind,
         operands::{
             ShifterOperand, barrel_shifter::ShiftType, 
             AddressingMode, OffsetType, AddressingModeMultiple
@@ -1895,5 +1896,41 @@ mod tests {
             (98125, [15,23,5,0], 0x4C, Endian::Little, T, 15, [77,23,5,0]),
         swpb_test_3: 
             (175325, [3,5,1,3], 0xA2, Endian::Big, T, 1, [3,5,221,3])
+    }
+
+    fn assert_data_abort(result: Result<SimulationEvent, SimulationException>) {
+        assert!(matches!(
+            result,
+            Err(SimulationException { kind: SimulationExceptionKind::DataAbort { .. }, .. })
+        ));
+    }
+
+    #[test]
+    fn write_outside_memory_is_data_abort() {
+        let mut cpu = ARMv5CPU::new();
+        cpu.set_register(ARMv5RegNames::R7, 4);
+        cpu.set_register(ARMv5RegNames::R0, 1);
+        cpu.set_register(ARMv5RegNames::R1, 0xFFFF_FF00u32 as i32);
+        cpu.set_register(ARMv5RegNames::R2, 0x200);
+
+        assert_data_abort(cpu.swi());
+    }
+
+    #[test]
+    fn swp_outside_memory_is_data_abort() {
+        let mut cpu = ARMv5CPU::new();
+        cpu.set_register(ARMv5RegNames::R0, 0x1000_0000);
+
+        assert_data_abort(cpu.swp(ARMv5RegNames::R0, ARMv5RegNames::R1, ARMv5RegNames::R2));
+        assert_eq!(0, cpu.get_register(ARMv5RegNames::R1));
+    }
+
+    #[test]
+    fn swpb_outside_memory_is_data_abort() {
+        let mut cpu = ARMv5CPU::new();
+        cpu.set_register(ARMv5RegNames::R0, 0x1000_0000);
+
+        assert_data_abort(cpu.swpb(ARMv5RegNames::R0, ARMv5RegNames::R1, ARMv5RegNames::R2));
+        assert_eq!(0, cpu.get_register(ARMv5RegNames::R1));
     }
 }
