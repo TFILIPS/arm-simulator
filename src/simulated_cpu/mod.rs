@@ -177,7 +177,7 @@ impl Memory for ARMv5CPU {
         let size: u32 = bytes.len() as u32;
         let (start, end): (usize, usize) = 
             ARMv5CPU::check_memory_access_get_boundaries(address, size)?;
-        self.memory.splice(start..end, bytes.iter().cloned());
+        self.memory[start..end].copy_from_slice(bytes);
         Ok(())
     }
 }
@@ -196,12 +196,10 @@ impl ARMv5CPU {
         }
     }
 
-    //This is not actually dead code, but the compiler thinks so
-    #[allow(dead_code)] 
     pub fn reset(&mut self) {
         self.registers = [0i32; 16];
         self.flags = [false; 4];
-        self.memory = vec![0u8; ARMv5CPU::MEMORY_SIZE];
+        self.memory.fill(0);
         self.encoding = Endian::Little;
         self.next_pc = 0;
     }

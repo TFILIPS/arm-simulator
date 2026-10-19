@@ -1593,7 +1593,7 @@ mod tests {
                 };
 
                 let address = (addr + (offset as i32)) as u32 as usize;
-                cpu.memory.splice(address..address+4, bytes);
+                cpu.memory[address..address+4].copy_from_slice(&bytes);
                 
                 let register = if pc { ARMv5RegNames::PC } else { ARMv5RegNames::R1 };
 
@@ -1773,7 +1773,7 @@ mod tests {
                 };
 
                 let address = address as u32 as usize;
-                cpu.memory.splice(address..address+8, bytes);
+                cpu.memory[address..address+8].copy_from_slice(&bytes);
 
                 cpu.ldm(amm).unwrap();
                 
@@ -1846,7 +1846,7 @@ mod tests {
                 cpu.set_register(source, vreg);
 
                 let address = addr as u32 as usize & 0xFFFFFFFC;
-                cpu.memory.splice(address..address+4, vmem);
+                cpu.memory[address..address+4].copy_from_slice(&vmem);
 
                 cpu.$function(ARMv5RegNames::R0, ARMv5RegNames::R1, source).unwrap();
 
