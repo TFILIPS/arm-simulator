@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::utils::BitAccess;
 
-use super::{SimulatedCPU, ARMv5CPU, names::{ARMv5RegNames, ARMv5FlagNames}};
+use super::{ARMv5CPU, names::{ARMv5RegNames, ARMv5FlagNames}};
 use barrel_shifter::ShiftType;
 
 pub mod barrel_shifter;
@@ -155,12 +155,12 @@ impl ARMv5CPU {
         if am.p {
             address = op(self.get_register_intern(am.rn) as u32, offset);
             if am.w {
-                self.set_register(am.rn, address as i32);
+                self.set_register_intern(am.rn, address as i32);
             }
         }
         else {
             address = self.get_register_intern(am.rn) as u32;
-            self.set_register(am.rn, op(address, offset) as i32);
+            self.set_register_intern(am.rn, op(address, offset) as i32);
         }
         address
     }
@@ -175,7 +175,7 @@ impl ARMv5CPU {
 
         let new_address: u32 = op(base_address, num_regs * 4);
         if amm.w {
-            self.set_register(amm.rn, new_address as i32);
+            self.set_register_intern(amm.rn, new_address as i32);
         }
 
         let mut start: u32 = if amm.u { base_address } 
@@ -289,7 +289,7 @@ mod tests {
                 let res_addr = cpu.compute_modify_address(am);
 
                 assert_eq!(addr_out, res_addr as u32);
-                assert_eq!(addr_mem, cpu.get_register(am.rn) as u32);
+                assert_eq!(addr_mem, cpu.get_register_after_execute(am.rn) as u32);
             }
         )*}
     }

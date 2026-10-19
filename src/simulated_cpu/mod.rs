@@ -62,7 +62,10 @@ pub struct ARMv5CPU {
     registers: [i32; 16],
     flags: [bool; 4],
     memory: Vec<u8>,
-    encoding: Endian
+    encoding: Endian,
+    // Address of the next instruction. Writing the PC during execution
+    // changes this value, while the PC itself stays at the current instruction.
+    next_pc: u32
 }
 impl SimulatedCPU for ARMv5CPU {
     type RegType = i32;
@@ -71,14 +74,12 @@ impl SimulatedCPU for ARMv5CPU {
 
     fn step(&mut self) -> Result<SimulationEvent, SimulationException> {
         let address: u32 = self.registers[ARMv5RegNames::PC] as u32;
-        let result: SimulationEvent = self.load_and_execute_instruction(address)?;
-        
-        //only increase program counter if it was not changed by the instruction
-        if address == (self.registers[ARMv5RegNames::PC] as u32) {
-            self.registers[ARMv5RegNames::PC] = 
-                self.registers[ARMv5RegNames::PC].wrapping_add(4);
-        }
+        self.next_pc = address.wrapping_add(4);
 
+        // On an exception the PC stays at the faulting instruction
+        let result: SimulationEvent = self.load_and_execute_instruction(address)?;
+
+        self.registers[ARMv5RegNames::PC] = self.next_pc as i32;
         Ok(result)
     }
 
@@ -165,7 +166,8 @@ impl ARMv5CPU {
             registers: [0i32; 16],
             flags: [false; 4],
             memory: vec![0u8; ARMv5CPU::MEMORY_SIZE],
-            encoding: Endian::Little
+            encoding: Endian::Little,
+            next_pc: 0
         }
     }
 
@@ -176,14 +178,25 @@ impl ARMv5CPU {
         self.flags = [false; 4];
         self.memory = vec![0u8; ARMv5CPU::MEMORY_SIZE];
         self.encoding = Endian::Little;
+        self.next_pc = 0;
     }
 
     fn get_register_intern(&self, register: ARMv5RegNames) -> i32 {
-        if let ARMv5RegNames::PC = register { 
-            self.registers[ARMv5RegNames::PC].wrapping_add(8) 
+        if let ARMv5RegNames::PC = register {
+            self.registers[ARMv5RegNames::PC].wrapping_add(8)
         }
-        else { 
-            self.registers[register] 
+        else {
+            self.registers[register]
+        }
+    }
+
+    // Writing the PC from an instruction is a branch
+    fn set_register_intern(&mut self, register: ARMv5RegNames, value: i32) {
+        if let ARMv5RegNames::PC = register {
+            self.next_pc = value as u32;
+        }
+        else {
+            self.registers[register] = value;
         }
     }
 
@@ -235,5 +248,59 @@ impl ARMv5CPU {
                 })
             }
         }
+    }
+}
+
+#[cfg(test)]
+impl ARMv5CPU {
+    // Unit tests call instruction functions directly instead of step(),
+    // so a written PC is still pending in next_pc
+    fn get_register_after_execute(&self, register: ARMv5RegNames) -> i32 {
+        if let ARMv5RegNames::PC = register {
+            self.next_pc as i32
+        }
+        else {
+            self.registers[register]
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::utils::Memory;
+    use super::{SimulatedCPU, ARMv5CPU, names::ARMv5RegNames};
+
+    macro_rules! step_tests {
+        ($($test_name:ident: $test_values:expr),*) 
+        => {$(
+            #[test]
+            fn $test_name() {
+                #[allow(overflowing_literals)]
+                let (instruction, r0, r1, exp_pc, exp_err): (u32, i32, i32, i32, bool) 
+                    = $test_values;
+
+                let mut cpu = ARMv5CPU::new();
+                cpu.set_memory(0x1000, &instruction.to_le_bytes()).unwrap();
+                cpu.set_register(ARMv5RegNames::PC, 0x1000);
+                cpu.set_register(ARMv5RegNames::R0, r0);
+                cpu.set_register(ARMv5RegNames::R1, r1);
+
+                let result = cpu.step();
+
+                assert_eq!(exp_err, result.is_err());
+                assert_eq!(exp_pc, cpu.get_register(ARMv5RegNames::PC));
+            }
+        )*}
+    }
+
+    step_tests! {
+        // mov r0, r0
+        step_falls_through: (0xE1A0_0000, 0, 0, 0x1004, false),
+        // b .
+        step_branch_to_self: (0xEAFF_FFFE, 0, 0, 0x1000, false),
+        // mov pc, r0
+        step_mov_pc_to_self: (0xE1A0_F000, 0x1000, 0, 0x1000, false),
+        // ldr r0, [r1] with r1 outside of memory
+        step_data_abort_keeps_pc: (0xE591_0000, 0, 0xFFFF_FFF0, 0x1000, true)
     }
 }
