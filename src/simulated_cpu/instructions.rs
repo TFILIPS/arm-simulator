@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use super::{
-    SimulatedCPU, ARMv5CPU, names::{ARMv5RegNames, ARMv5FlagNames},
+    SimulatedCPU, ARMv5CPU, names::{ARMv5RegNames, ARMv5FlagNames}, UnsupportedReason,
     operands::{
         ShifterOperand, AddressingMode, 
         AddressingModeMultiple, BranchOperator
@@ -1048,13 +1048,13 @@ impl ARMv5CPU {
     // Status register access instructions
     fn mrs(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
-            reason: "status register access is not supported yet"
+            reason: UnsupportedReason::StatusRegister
         })
     }
 
     fn msr(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
-            reason: "status register access is not supported yet"
+            reason: UnsupportedReason::StatusRegister
         })
     }
 
@@ -1062,61 +1062,61 @@ impl ARMv5CPU {
     // Coprocessor instructions
     fn cdp(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
-            reason: "coprocessor instructions are not supported"
+            reason: UnsupportedReason::Coprocessor
         })
     }
 
     fn cdp2(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
-            reason: "coprocessor instructions are not supported"
+            reason: UnsupportedReason::Coprocessor
         })
     }
 
     fn ldc(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
-            reason: "coprocessor instructions are not supported"
+            reason: UnsupportedReason::Coprocessor
         })
     }
 
     fn ldc2(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
-            reason: "coprocessor instructions are not supported"
+            reason: UnsupportedReason::Coprocessor
         })
     }
 
     fn mcr(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
-            reason: "coprocessor instructions are not supported"
+            reason: UnsupportedReason::Coprocessor
         })
     }
 
     fn mcr2(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
-            reason: "coprocessor instructions are not supported"
+            reason: UnsupportedReason::Coprocessor
         })
     }
 
     fn mrc(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
-            reason: "coprocessor instructions are not supported"
+            reason: UnsupportedReason::Coprocessor
         })
     }
 
     fn mrc2(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
-            reason: "coprocessor instructions are not supported"
+            reason: UnsupportedReason::Coprocessor
         })
     }
 
     fn stc(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
-            reason: "coprocessor instructions are not supported"
+            reason: UnsupportedReason::Coprocessor
         })
     }
 
     fn stc2(&mut self) -> Result<CpuEvent, SimulationExceptionKind> {
         Err(SimulationExceptionKind::UnsupportedInstruction {
-            reason: "coprocessor instructions are not supported"
+            reason: UnsupportedReason::Coprocessor
         })
     }
 }

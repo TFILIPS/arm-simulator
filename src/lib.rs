@@ -10,7 +10,7 @@ use simulated_cpu::{names::ARMv5FlagNames, ARMv5CPU, CpuEvent, SimulatedCPU};
 use utils::Memory;
 pub use elf_loader::ElfError;
 pub use simulated_cpu::{
-    SimulationException, SimulationExceptionKind, names::ARMv5RegNames
+    SimulationException, SimulationExceptionKind, UnsupportedReason, names::ARMv5RegNames
 };
 pub use utils::MemoryError;
 

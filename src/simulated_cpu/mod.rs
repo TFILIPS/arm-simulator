@@ -40,7 +40,7 @@ pub enum SimulationExceptionKind {
     PrefetchAbort,
     DataAbort{memory_address: u32, size: u32}, 
     UndefinedInstruction,
-    UnsupportedInstruction{reason: &'static str}, 
+    UnsupportedInstruction{reason: UnsupportedReason}, 
     UnsupportedSyscall{number: i32}
 }
 impl From<MemoryError> for SimulationExceptionKind {
@@ -48,6 +48,22 @@ impl From<MemoryError> for SimulationExceptionKind {
         SimulationExceptionKind::DataAbort { 
             memory_address: value.address, 
             size: value.size 
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnsupportedReason {
+    StatusRegister,
+    Coprocessor
+}
+impl Display for UnsupportedReason {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            UnsupportedReason::StatusRegister => 
+                write!(f, "status register access is not supported yet"),
+            UnsupportedReason::Coprocessor => 
+                write!(f, "coprocessor instructions are not supported")
         }
     }
 }
@@ -270,7 +286,7 @@ mod tests {
     use crate::utils::{Memory, MemoryError};
     use super::{
         SimulatedCPU, ARMv5CPU, CpuEvent, SimulationException, SimulationExceptionKind,
-        names::ARMv5RegNames
+        UnsupportedReason, names::ARMv5RegNames
     };
 
     macro_rules! step_tests {
@@ -412,7 +428,7 @@ mod tests {
         ),
         message_unsupported_instruction: (
             SimulationExceptionKind::UnsupportedInstruction { 
-                reason: "coprocessor instructions are not supported" 
+                reason: UnsupportedReason::Coprocessor 
             },
             "Unsupported instruction at 0x00010084: coprocessor instructions are not supported"
         ),
