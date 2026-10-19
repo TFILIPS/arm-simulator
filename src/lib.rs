@@ -49,15 +49,8 @@ impl ARMSimulator {
 
     fn load_elf(&mut self, elf: ELFFile) -> Result<(), ElfError> {
         elf.check_header_values()?;
-
-        self.simulated_cpu.set_register(ARMv5RegNames::PC, elf.get_entry_point() as i32);
-        self.simulated_cpu.set_register(ARMv5RegNames::SP, DEFAULT_STACK_POINTER as i32);
-        self.simulated_cpu.set_encoding(elf.get_encoding());
-        elf.load_into_memory(&mut self.simulated_cpu)?;
-
         self.elf_file = Some(elf);
-        self.stopped_at_breakpoint = None;
-        Ok(())
+        self.reload_simulator()
     }
 
 
@@ -176,7 +169,13 @@ impl From<MemoryError> for JsValue {
 
 #[cfg(test)]
 mod tests {
-    use crate::{ARMSimulator, ARMv5RegNames, ElfError, SimulationEvent};
+    use crate::{
+        ARMSimulator, ARMv5RegNames, ARMv5FlagNames, ElfError, SimulationEvent, 
+        DEFAULT_STACK_POINTER
+    };
+
+    // 32-bit little endian ARM executable
+    const HALLO: &[u8] = include_bytes!("../sample_programs/hallo");
 
     // 0x1000: mov r0, r0
     // 0x1004: mov r0, r0   <- breakpoint
@@ -261,6 +260,40 @@ mod tests {
         let mut sim = ARMSimulator::new();
         sim.load_elf_bytes(bytes).unwrap();
         assert!(sim.get_disassembly().is_err());
+    }
+
+    #[test]
+    fn loading_starts_with_clean_cpu() {
+        let mut sim = ARMSimulator::new();
+        sim.set_register(ARMv5RegNames::R5, 42);
+        sim.set_flag(ARMv5FlagNames::Z, true);
+        sim.set_memory(0x1000, &[1, 2, 3, 4]).unwrap();
+
+        sim.load_elf_bytes(HALLO.to_vec()).unwrap();
+
+        assert_eq!(0, sim.get_register(ARMv5RegNames::R5));
+        assert!(!sim.get_flag(ARMv5FlagNames::Z));
+        assert_eq!(vec![0; 4], sim.get_memory(0x1000, 4).unwrap());
+    }
+
+    #[test]
+    fn reload_restores_start_state() {
+        let mut sim = ARMSimulator::new();
+        sim.load_elf_bytes(HALLO.to_vec()).unwrap();
+        let entry_point: u32 = sim.get_program_counter();
+        let program: Vec<u8> = sim.get_memory(entry_point, 36).unwrap();
+
+        sim.multiple_steps(3).unwrap();
+        sim.set_register(ARMv5RegNames::R5, 42);
+        sim.set_memory(entry_point, &[0; 4]).unwrap();
+
+        sim.reload_simulator().unwrap();
+
+        let mut expected_registers: Vec<i32> = vec![0; 16];
+        expected_registers[13] = DEFAULT_STACK_POINTER as i32;
+        expected_registers[15] = entry_point as i32;
+        assert_eq!(expected_registers, sim.get_registers());
+        assert_eq!(program, sim.get_memory(entry_point, 36).unwrap());
     }
 
     #[test]
