@@ -206,7 +206,7 @@ impl ARMv5CPU {
         let start: usize = address as usize;
         if let Some(end) = address.checked_add(size) {
             let end: usize = end as usize;
-            if end < ARMv5CPU::MEMORY_SIZE {
+            if end <= ARMv5CPU::MEMORY_SIZE {
                 return Ok((start, end));
             }
         }
@@ -302,5 +302,29 @@ mod tests {
         step_mov_pc_to_self: (0xE1A0_F000, 0x1000, 0, 0x1000, false),
         // ldr r0, [r1] with r1 outside of memory
         step_data_abort_keeps_pc: (0xE591_0000, 0, 0xFFFF_FFF0, 0x1000, true)
+    }
+
+    macro_rules! memory_bounds_tests {
+        ($($test_name:ident: $test_values:expr),*)
+        => {$(
+            #[test]
+            fn $test_name() {
+                let (address, size, exp_ok): (u32, u32, bool) = $test_values;
+
+                let mut cpu = ARMv5CPU::new();
+                let bytes: Vec<u8> = vec![0xAB; size as usize];
+
+                assert_eq!(exp_ok, cpu.get_memory(address, size).is_ok());
+                assert_eq!(exp_ok, cpu.set_memory(address, &bytes).is_ok());
+            }
+        )*}
+    }
+
+    memory_bounds_tests! {
+        memory_last_byte: (0x3FF_FFFF, 1, true),
+        memory_last_word: (0x3FF_FFFC, 4, true),
+        memory_word_crossing_end: (0x3FF_FFFE, 4, false),
+        memory_one_past_end: (0x400_0000, 1, false),
+        memory_empty_at_end: (0x400_0000, 0, true)
     }
 }
