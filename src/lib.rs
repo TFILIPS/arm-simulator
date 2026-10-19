@@ -34,7 +34,16 @@ impl ARMSimulator {
     }
  
     pub fn load_elf_file(&mut self, path: &str) -> Result<(), &'static str> {
-        let elf: elf_loader::ELFFile = elf_loader::ELFFile::load(path)?;
+        let elf: ELFFile = ELFFile::load(path)?;
+        self.load_elf(elf)
+    }
+
+    pub fn load_elf_bytes(&mut self, bytes: Vec<u8>) -> Result<(), &'static str> {
+        let elf: ELFFile = ELFFile::load_raw(bytes)?;
+        self.load_elf(elf)
+    }
+
+    fn load_elf(&mut self, elf: ELFFile) -> Result<(), &'static str> {
         elf.check_header_values()?;
 
         self.simulated_cpu.set_register(ARMv5RegNames::PC, elf.get_entry_point() as i32);
@@ -73,6 +82,14 @@ impl ARMSimulator {
     pub fn get_disassembly(&self) -> Result<String, &'static str> {
         if let Some(elf_file) = &self.elf_file {
             let (text_start, text_end) = elf_file.get_text_section_range()?;
+
+            // Disassembly reads whole words, which all have to be in memory
+            let size: u32 = (text_end - text_start).checked_next_multiple_of(4)
+                .ok_or("The .text section is too large! Check ELF file.")?;
+            if self.simulated_cpu.get_memory(text_start, size).is_err() {
+                return Err("The .text section is outside of memory! Check ELF file.");
+            }
+
             let labels: Vec<(u32, String)> = elf_file.get_labels()?;
             Ok(self.simulated_cpu.disassemble_memory(text_start, text_end, labels))
         }
@@ -221,6 +238,19 @@ mod tests {
         assert!(matches!(sim.multiple_steps(100).unwrap(), SimulationEvent::ConsoleOutput { .. }));
         assert!(matches!(sim.multiple_steps(100).unwrap(), SimulationEvent::Breakpoint));
         assert_eq!(0x1004, sim.get_program_counter());
+    }
+
+    #[test]
+    fn text_section_outside_memory_is_error() {
+        // Section headers start at 640 in hallo, .text is section 1 and its
+        // address field is at +12. The loaded segment stays unchanged.
+        let mut bytes: Vec<u8> = include_bytes!("../sample_programs/hallo").to_vec();
+        let text_address: usize = 640 + 40 + 12;
+        bytes[text_address..text_address + 4].copy_from_slice(&0x7FFF_0000u32.to_le_bytes());
+
+        let mut sim = ARMSimulator::new();
+        sim.load_elf_bytes(bytes).unwrap();
+        assert!(sim.get_disassembly().is_err());
     }
 
     #[test]
